@@ -244,7 +244,7 @@ ros2 bag record \
 |---|---|---|
 | Ubuntu laptop (standard kernel) | `can0` | USB dongle (`gs_usb`) claims `can0` directly |
 | Jetson Orin (Tegra kernel) | `can1` | Native MTTCAN occupies `can0`; USB dongle is `can1` |
-| Raspberry Pi 5 (Ubuntu 24.04 / Pi OS) | `can0` | No native CAN on the Pi; AKCAN40 / gs_usb dongle claims `can0`. Full guide: `doc/raspberry_pi5_akcan40.md` |
+| Raspberry Pi 5 (Ubuntu 24.04 / Pi OS Bookworm) | `can0` | No native CAN on the Pi; AKCAN40 / gs_usb dongle claims `can0` (`CONFIG_CAN_GS_USB=m` in both kernels). Package builds unmodified on Humble+. Full guide: `doc/raspberry_pi5_akcan40.md` |
 
 Use the setup scripts to bring up the interface before launching (run once per reboot):
 ```bash

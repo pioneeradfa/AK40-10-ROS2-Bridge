@@ -72,7 +72,7 @@ ip link show can1   # should show state UP, bitrate 1000000
 
 The Pi 5 has **no on-board CAN controller**, but the CubeMars AKCAN40 USB-CAN adapter (and any CANable / gs_usb-compatible dongle) works out of the box: the standard Pi kernel (Ubuntu 24.04 and Raspberry Pi OS) ships `gs_usb`, and the adapter claims `can0`. No kernel module build is needed.
 
-Recommended stack: **Ubuntu Server 24.04 LTS (64-bit) + ROS 2 Jazzy** (Tier-1 apt binaries). Full from-scratch guide — flashing the OS, ROS 2 install, wiring, termination, boot persistence, auto-start, Docker on Raspberry Pi OS, and troubleshooting — is in **[doc/raspberry_pi5_akcan40.md](doc/raspberry_pi5_akcan40.md)**.
+Recommended stack: **Ubuntu Server 24.04 LTS (64-bit) + ROS 2 Jazzy** (Tier-1 apt binaries). **Raspberry Pi OS Bookworm with an existing ROS 2 install (e.g. Humble) is also supported** — the Pi OS kernel ships `gs_usb` too, the CAN steps are identical, and the package builds unmodified on Humble+. Full from-scratch guide — flashing the OS, ROS 2 install, wiring, termination, boot persistence, auto-start, Raspberry Pi OS / Humble quickstart, Docker, and troubleshooting — is in **[doc/raspberry_pi5_akcan40.md](doc/raspberry_pi5_akcan40.md)**.
 
 **Every reboot — bring up can0 (recommended):**
 

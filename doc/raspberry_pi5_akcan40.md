@@ -4,10 +4,17 @@ Complete setup guide for running the `ak_motor_driver` package on a **Raspberry 
 with the CubeMars **AKCAN40** USB-to-CAN adapter driving an **AK40-10** actuator.
 
 The Raspberry Pi 5 has **no on-board CAN controller** (the Broadcom BCM2712 SoC does not
-include one). The AKCAN40 dongle is a `gs_usb`-compatible USB-CAN adapter: the standard
-Pi kernel ships the `gs_usb` driver, so the dongle simply enumerates as `can0` — no
-out-of-tree kernel module build is needed (unlike Jetson Orin, see
+include one). The AKCAN40 dongle is a `gs_usb`-compatible USB-CAN adapter, and **both**
+supported Pi OS options ship the driver as a loadable module
+(`CONFIG_CAN_GS_USB=m` in the Ubuntu `linux-raspi` kernel and in the Raspberry Pi OS
+`bcm2712_defconfig`), so the dongle simply enumerates as `can0` — no out-of-tree kernel
+module build is needed (unlike Jetson Orin, see
 [README § Jetson Orin](../README.md#jetson-orin-tegra-kernel)).
+
+| OS on the Pi 5 | ROS 2 | Status |
+|---|---|---|
+| Ubuntu Server/Desktop 24.04 arm64 | Jazzy (Tier-1 apt binaries) | Recommended — § 3 onward |
+| Raspberry Pi OS Bookworm (Debian 12) arm64 | Humble (or any working install) | Supported — the driver builds unmodified; see § 9. The CAN steps (§ 6) are identical. |
 
 ```
 ┌────────────────┐  USB   ┌──────────┐  CAN @ 1 Mbps   ┌──────────────────┐  24 V  ┌──────────┐
@@ -48,6 +55,9 @@ out-of-tree kernel module build is needed (unlike Jetson Orin, see
 4. **Power:** motor → 24 V PSU via the XT30 power cable. Pi → its own 5 V USB-C PSU.
 
 ## 3. Flash Ubuntu Server 24.04 LTS (64-bit)
+
+> Already running Raspberry Pi OS with a working ROS 2 (e.g. Humble)? Skip to § 9 — only
+> this section and § 4 are Ubuntu-specific.
 
 Use **Ubuntu 24.04 (Noble) arm64** — it is the Tier-1 platform for **ROS 2 Jazzy**, so
 you install ROS from apt binaries. (Raspberry Pi OS also works for CAN, but has no
@@ -191,6 +201,7 @@ Wants=network-online.target
 Type=simple
 User=<your_user>
 ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && source /home/<your_user>/ak40_ws/install/setup.bash && exec ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0'
+# On Raspberry Pi OS with Humble, source your Humble install instead, e.g. /opt/ros/humble/setup.bash
 Restart=on-failure
 RestartSec=5
 
@@ -208,14 +219,53 @@ journalctl -u ak_motor -f        # live logs
 > state — so auto-start is safe. Still, review the
 > [Safety](../README.md#safety) section before running a rig unattended.
 
-## 9. Using Raspberry Pi OS instead of Ubuntu?
+## 9. Raspberry Pi OS (Debian Bookworm) — e.g. with ROS 2 Humble
 
-Raspberry Pi OS (Debian Bookworm/Trixie) is **Tier 3** for ROS 2 — there are no official
-apt binaries. The CAN side is identical (`gs_usb` is in the Pi OS kernel; the same
-`setup_can_pi5.sh` works). For ROS 2 you have two options:
+Raspberry Pi OS is **Tier 3** for ROS 2 (no official apt binaries), but it is a fully
+working setup:
 
-- **Docker (easiest):** run the arm64 `ros:jazzy` image with host networking so DDS and
-  SocketCAN work directly:
+- **CAN side — identical to Ubuntu.** The Pi OS kernel (6.6.y, `bcm2712_defconfig`)
+  includes `gs_usb`, `slcan`, and `mcp251x(fd)` as modules, so the AKCAN40 appears as
+  `can0` and § 6 applies as-is:
+
+  ```bash
+  sudo apt install -y can-utils
+  sudo ./scripts/setup_can_pi5.sh --persist   # once; or without --persist per reboot
+  ```
+
+- **Driver side — Humble-compatible.** `ak_motor_driver` only needs `rclcpp`,
+  `sensor_msgs`, `std_msgs`, `std_srvs` (C++17, `ament_cmake`) — it builds unmodified on
+  ROS 2 Humble and newer. If you already have Humble sourced (`echo $ROS_DISTRO` →
+  `humble`), just build the package against it.
+
+**Quickstart from a GitHub ZIP download** (the ZIP unpacks as a loose folder, e.g.
+`~/AK40-10-ROS2-Bridge-master` — colcon needs it inside a workspace `src/`):
+
+```bash
+sudo apt install -y build-essential python3-colcon-common-extensions can-utils
+
+mkdir -p ~/ros2_ws/src
+mv ~/AK40-10-ROS2-Bridge-master ~/ros2_ws/src/ak_motor_driver
+cd ~/ros2_ws
+
+source /opt/ros/humble/setup.bash        # or wherever your Humble install lives
+colcon build --packages-select ak_motor_driver
+
+echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
+source ~/ros2_ws/install/setup.bash
+
+sudo ~/ros2_ws/src/ak_motor_driver/scripts/setup_can_pi5.sh
+ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
+```
+
+> **Note:** the Pi 5 additions (`scripts/setup_can_pi5.sh`, this guide) live on the repo
+> branch — a ZIP of `master` may not contain them yet. Clone instead of using the ZIP, or
+> use the manual `ip link` commands in § 6 / README until the branch is merged.
+
+**If you don't have ROS 2 on Pi OS yet**, pick one:
+
+- **Docker (easiest):** run the arm64 `ros:humble` or `ros:jazzy` image with host
+  networking so DDS and SocketCAN work directly:
 
   ```bash
   sudo apt install docker.io
@@ -226,7 +276,7 @@ apt binaries. The CAN side is identical (`gs_usb` is in the Pi OS kernel; the sa
   git clone https://github.com/pioneeradfa/AK40-10-ROS2-Bridge.git ak_motor_driver
 
   docker run -it --rm --network host --privileged \
-    -v $HOME/ak40_ws:/ws ros:jazzy bash
+    -v $HOME/ak40_ws:/ws ros:humble bash
   # inside the container:
   cd /ws && colcon build --packages-select ak_motor_driver && source install/setup.bash
   ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
