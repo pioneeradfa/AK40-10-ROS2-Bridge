@@ -68,6 +68,34 @@ ip link show can1   # should show state UP, bitrate 1000000
 
 > **Why can1 and not can0?** The Jetson Orin has a built-in MTTCAN controller that always claims `can0`. The USB dongle is enumerated as the next available interface, `can1`. The native `can0` requires an external CAN transceiver chip wired to the GPIO header — if you use that path instead, pass `can_interface:=can0`.
 
+#### Raspberry Pi 5 (AKCAN40 USB-CAN adapter)
+
+The Pi 5 has **no on-board CAN controller**, but the CubeMars AKCAN40 USB-CAN adapter (and any CANable / gs_usb-compatible dongle) works out of the box: the standard Pi kernel (Ubuntu 24.04 and Raspberry Pi OS) ships `gs_usb`, and the adapter claims `can0`. No kernel module build is needed.
+
+Recommended stack: **Ubuntu Server 24.04 LTS (64-bit) + ROS 2 Jazzy** (Tier-1 apt binaries). Full from-scratch guide — flashing the OS, ROS 2 install, wiring, termination, boot persistence, auto-start, Docker on Raspberry Pi OS, and troubleshooting — is in **[doc/raspberry_pi5_akcan40.md](doc/raspberry_pi5_akcan40.md)**.
+
+**Every reboot — bring up can0 (recommended):**
+
+```bash
+sudo ./scripts/setup_can_pi5.sh
+```
+
+**One-time — auto-configure on every boot/hotplug (udev rule + module autoload):**
+
+```bash
+sudo ./scripts/setup_can_pi5.sh --persist
+```
+
+**Backup — manual commands:**
+
+```bash
+sudo modprobe gs_usb          # normally auto-loads when the dongle is plugged in
+sudo ip link set can0 down
+sudo ip link set can0 up type can bitrate 1000000
+sudo ip link set can0 txqueuelen 1000
+ip link show can0             # should show state UP, bitrate 1000000
+```
+
 ### 2. Build and source the workspace
 
 ```bash
@@ -86,6 +114,9 @@ sudo ./scripts/setup_can_laptop.sh
 
 # Jetson Orin
 sudo ./scripts/setup_can_orin.sh
+
+# Raspberry Pi 5 (AKCAN40 dongle)
+sudo ./scripts/setup_can_pi5.sh
 ```
 
 ### Step 2 — launch the node
@@ -96,6 +127,9 @@ ros2 launch ak_motor_driver cable_control.launch.py
 
 # Jetson Orin (USB dongle is can1)
 ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can1
+
+# Raspberry Pi 5 (AKCAN40 dongle is can0 — the default)
+ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
 ```
 
 ## Operating sequence
@@ -537,7 +571,7 @@ ros2 topic pub --rate 50 /ak_motor_node/command sensor_msgs/msg/JointState \
 Verify raw CAN traffic (use `can1` on Jetson Orin):
 
 ```bash
-candump can0      # Ubuntu laptop
+candump can0      # Ubuntu laptop / Raspberry Pi 5
 candump can1      # Jetson Orin
 ```
 

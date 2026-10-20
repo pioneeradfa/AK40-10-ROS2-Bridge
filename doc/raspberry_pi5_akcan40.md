@@ -1,0 +1,270 @@
+# Raspberry Pi 5 + AKCAN40 + AK40-10 with ROS 2
+
+Complete setup guide for running the `ak_motor_driver` package on a **Raspberry Pi 5**
+with the CubeMars **AKCAN40** USB-to-CAN adapter driving an **AK40-10** actuator.
+
+The Raspberry Pi 5 has **no on-board CAN controller** (the Broadcom BCM2712 SoC does not
+include one). The AKCAN40 dongle is a `gs_usb`-compatible USB-CAN adapter: the standard
+Pi kernel ships the `gs_usb` driver, so the dongle simply enumerates as `can0` — no
+out-of-tree kernel module build is needed (unlike Jetson Orin, see
+[README § Jetson Orin](../README.md#jetson-orin-tegra-kernel)).
+
+```
+┌────────────────┐  USB   ┌──────────┐  CAN @ 1 Mbps   ┌──────────────────┐  24 V  ┌──────────┐
+│ Raspberry Pi 5 │───────►│  AKCAN40 │────H/L─────────►│ AK40-10 driver   │◄───────│ 24 V PSU │
+│ (ROS 2 Jazzy)  │        │  (can0)  │   120 Ω both ends│ board (GH1.25)   │        └──────────┘
+└────────────────┘        └──────────┘                 └──────────────────┘
+        ▲                                                       │
+        └──────────────── GND tied together ────────────────────┘
+```
+
+---
+
+## 1. What you need
+
+| Item | Notes |
+|---|---|
+| Raspberry Pi 5 (4 GB or 8 GB) | arm64. A Pi 4 also works with the same steps. |
+| Official 27 W USB-C PSU (5 V / 5 A PD) | Undervoltage causes USB dropouts → the CAN dongle resets. |
+| Good microSD (A2) or NVMe HAT | ROS 2 + colcon build is I/O heavy. |
+| CubeMars AKCAN40 USB-CAN adapter | `gs_usb` / candleLight-class, fixed 1 Mbps — matches the AK40-10 CAN bus rate. Any SocketCAN USB adapter (CANable, PCAN-USB, …) also works. |
+| CubeMars AK40-10 actuator + driver board | With the AK V2.0 wiring pack (power + CAN + serial cables). |
+| 24 V DC power supply for the motor | AK40-10 rated voltage is 24 V. Size the current for your load; **never** power the motor from the Pi. |
+| CAN termination | Two 120 Ω terminations total on the bus (see § 2). |
+
+## 2. Wiring
+
+1. **CAN:** connect the AKCAN40's `CAN_H` → driver-board CAN cable `CAN_H`, and
+   `CAN_L` → `CAN_L`. Pinout of the AK 4-pin GH1.25 CAN connector is in the driver
+   manual PDF under [`doc/`](.) (and on the CubeMars product page). If in doubt,
+   swap H/L and re-test — a swapped pair simply produces no frames, nothing breaks.
+2. **Termination:** the CAN bus needs **120 Ω at each physical end** (24 V PSU end and
+   adapter end). Check whether your AKCAN40 has a termination jumper/solder bridge;
+   the AK40-10 driver board does not terminate the bus. If neither end is terminated,
+   solder/wire a 120 Ω resistor across `CAN_H`–`CAN_L` near the motor.
+   A bus with wrong termination shows up as constant error frames / BUS-OFF.
+3. **Ground:** tie the Pi's GND to the motor PSU GND (e.g. Pi GPIO GND pin → PSU V−).
+   Separate supplies without a common reference cause flaky CAN and can damage ports.
+4. **Power:** motor → 24 V PSU via the XT30 power cable. Pi → its own 5 V USB-C PSU.
+
+## 3. Flash Ubuntu Server 24.04 LTS (64-bit)
+
+Use **Ubuntu 24.04 (Noble) arm64** — it is the Tier-1 platform for **ROS 2 Jazzy**, so
+you install ROS from apt binaries. (Raspberry Pi OS also works for CAN, but has no
+official ROS 2 binaries — see § 9.)
+
+1. Install [Raspberry Pi Imager](https://www.raspberrypi.com/software/) on your PC.
+2. Choose device **Raspberry Pi 5** → OS **Other general-purpose OS → Ubuntu →
+   Ubuntu Server 24.04.2 LTS (64-bit)**. (Ubuntu *Desktop* 24.04 also works if you
+   want a monitor/GUI; Server is lighter for a headless robot.)
+3. In Imager's **OS customization** (gear icon): set hostname (e.g. `ak40pi`), enable
+   SSH with your public key or a password, set Wi-Fi/ethernet, locale, and your user.
+4. Flash, boot the Pi, and log in over SSH:
+
+```bash
+ssh <user>@ak40pi.local
+```
+
+> The Pi 5 needs Ubuntu 23.10 or newer (older kernels lack BCM2712 support), so
+> ROS 2 Humble/Ubuntu 22.04 is not a practical target on this board. Jazzy is the
+> right pairing.
+
+## 4. Install ROS 2 Jazzy and CAN tools
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y software-properties-common curl
+sudo add-apt-repository universe
+
+# ROS 2 apt repository (official Jazzy instructions)
+sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+  -o /usr/share/keyrings/ros-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+  | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+sudo apt update
+sudo apt install -y ros-jazzy-ros-base ros-dev-tools   # headless; use ros-jazzy-desktop if you want rqt/foxglove tooling
+sudo apt install -y can-utils                          # candump, cansend, ip link CAN support
+
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+source ~/.bashrc
+```
+
+Verify: `ros2 --help` prints usage, and `candump --help` exists.
+
+## 5. Get and build the driver
+
+```bash
+mkdir -p ~/ak40_ws/src && cd ~/ak40_ws/src
+git clone https://github.com/pioneeradfa/AK40-10-ROS2-Bridge.git ak_motor_driver
+
+cd ~/ak40_ws
+# All package deps (rclcpp, sensor_msgs, std_msgs, std_srvs) are already in ros-jazzy-ros-base.
+# Optional, if you want rosdep to verify: sudo apt install python3-rosdep && sudo rosdep init && rosdep update
+# rosdep install --from-paths src --ignore-src -r -y
+colcon build --packages-select ak_motor_driver
+echo "source ~/ak40_ws/install/setup.bash" >> ~/.bashrc
+source ~/.bashrc
+```
+
+The package is plain C++17 / `ament_cmake` — a native arm64 build on the Pi 5 takes a
+few minutes. No cross-compilation needed.
+
+## 6. Bring up the CAN interface (AKCAN40 → `can0`)
+
+Plug the AKCAN40 into any Pi 5 USB port, power the motor, then from the repo:
+
+```bash
+sudo ./scripts/setup_can_pi5.sh              # configure can0 @ 1 Mbps
+sudo ./scripts/setup_can_pi5.sh --persist    # one-time: also auto-configure on every boot/hotplug
+```
+
+The script loads `gs_usb`, waits for the interface to enumerate, and runs:
+
+```bash
+sudo ip link set can0 down
+sudo ip link set can0 type can bitrate 1000000
+sudo ip link set can0 txqueuelen 1000
+sudo ip link set can0 up
+ip link show can0        # expect: state UP, bitrate 1000000
+```
+
+`--persist` installs `/etc/modules-load.d/gs_usb.conf` and a udev rule
+(`/etc/udev/rules.d/99-akcan40-can.rules`) that brings any `can*` interface up at
+1 Mbps whenever it appears — after this you never run the script again, even if the
+dongle is replugged.
+
+Sanity check the bus (motor powered, adapter up):
+
+```bash
+candump can0     # in terminal A
+# in terminal B — the motor ACKs nothing until addressed, so instead launch the
+# node (§ 7) and call enable; you should then see one feedback frame per command
+```
+
+## 7. Launch and run the motor
+
+```bash
+source ~/ak40_ws/install/setup.bash
+
+# basic driver node
+ros2 launch ak_motor_driver ak_motor.launch.py can_interface:=can0
+
+# or the GUI-facing cable control node
+ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
+```
+
+`can0` is already the launch default on the Pi (the dongle claims `can0` just like on
+an Ubuntu laptop — the Orin's `can1` does not apply here), so the argument can be
+omitted.
+
+Then follow the normal **[Operating sequence](../README.md#operating-sequence)** in the
+README: set encoder zero (while disabled) → set gains → publish `~/command` →
+`enable` → move → `disable` before stopping the node.
+
+Quick smoke test:
+
+```bash
+# terminal 1
+ros2 launch ak_motor_driver ak_motor.launch.py
+# terminal 2
+ros2 service call /ak_motor_node/enable std_srvs/srv/Trigger
+ros2 topic pub --rate 50 /ak_motor_node/command sensor_msgs/msg/JointState \
+  "{name: ['ak40_10'], position: [0.5], velocity: [0.0], effort: [0.0]}"
+ros2 topic echo /ak_motor_node/joint_state        # feedback flowing → CAN link OK
+ros2 service call /ak_motor_node/disable std_srvs/srv/Trigger   # ALWAYS disable when done
+```
+
+## 8. Optional: auto-start the node at boot
+
+With `setup_can_pi5.sh --persist` done (§ 6), CAN is up before the node starts.
+Add a systemd unit if you want the driver to run headless at boot:
+
+```bash
+sudo tee /etc/systemd/system/ak_motor.service > /dev/null << 'EOF'
+[Unit]
+Description=AK40-10 ROS 2 driver (ak_motor_driver)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<your_user>
+ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && source /home/<your_user>/ak40_ws/install/setup.bash && exec ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now ak_motor.service
+journalctl -u ak_motor -f        # live logs
+```
+
+> **Safety:** the node does not enable the motor by itself (enable is a service call),
+> and `ak_motor_cable_control_node` sends `exit_mit_mode` on startup to clear any armed
+> state — so auto-start is safe. Still, review the
+> [Safety](../README.md#safety) section before running a rig unattended.
+
+## 9. Using Raspberry Pi OS instead of Ubuntu?
+
+Raspberry Pi OS (Debian Bookworm/Trixie) is **Tier 3** for ROS 2 — there are no official
+apt binaries. The CAN side is identical (`gs_usb` is in the Pi OS kernel; the same
+`setup_can_pi5.sh` works). For ROS 2 you have two options:
+
+- **Docker (easiest):** run the arm64 `ros:jazzy` image with host networking so DDS and
+  SocketCAN work directly:
+
+  ```bash
+  sudo apt install docker.io
+  sudo usermod -aG docker $USER   # re-login after this
+
+  # create the workspace on the host first (§5, clone step only — no ROS install needed)
+  mkdir -p ~/ak40_ws/src && cd ~/ak40_ws/src
+  git clone https://github.com/pioneeradfa/AK40-10-ROS2-Bridge.git ak_motor_driver
+
+  docker run -it --rm --network host --privileged \
+    -v $HOME/ak40_ws:/ws ros:jazzy bash
+  # inside the container:
+  cd /ws && colcon build --packages-select ak_motor_driver && source install/setup.bash
+  ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
+  ```
+
+- **Build from source:** follow the
+  [ROS 2 Jazzy source install](https://docs.ros.org/en/jazzy/Installation/Alternatives/Ubuntu-Development-Setup.html)
+  on the Pi (works, but slow — order of an hour or more).
+
+## 10. Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| `lsusb` doesn't list the adapter | USB cable/power issue. Try another port; avoid unpowered hubs. |
+| Adapter in `lsusb` but no `can0` | `sudo modprobe gs_usb`; check `dmesg \| tail -30`. If the device shows up as `/dev/ttyACM0` instead, its firmware is serial (slcan) — see the fallback below. |
+| `RTNETLINK answers: Operation not supported` on `ip link set can0 type can` | The interface isn't a CAN device (wrong name picked, or serial firmware). Check `ip -details link`. |
+| Node runs but no `joint_state` feedback | In another terminal: `candump can0`. No frames at all → check CAN_H/CAN_L swap, termination (2 × 120 Ω), common ground, motor power. Feedback only flows **after** `enable` (MIT mode is request-response). |
+| Interface goes BUS-OFF (`ip -details link show can0` shows `bus-off`) | Usually the node transmitting before the motor is powered (no ACK). Recover: `sudo ip link set can0 down && sudo ip link set can0 up`. Power the motor first. |
+| `Resource temporarily unavailable` / dropped frames at 100 Hz | Small TX queue: `sudo ip link set can0 txqueuelen 1000` (the setup script does this). Also check the PSU is 5 V/5 A — USB brownouts reset the dongle. |
+| `candump` shows constant error frames | Termination wrong (need exactly 2 × 120 Ω), or bitrate mismatch (must be 1 Mbps). |
+| Pi reboots randomly under motor load | Motor PSU and Pi PSU must be separate with common ground; back-EMF/current spikes on a shared supply brown out the Pi. |
+| ROS 2 topics not visible from your laptop | Same `ROS_DOMAIN_ID` on both machines, same subnet, multicast allowed. Wi-Fi power saving adds latency: `sudo iw dev wlan0 set power_save off` (or use wired Ethernet). |
+
+**slcan fallback** (only if your adapter enumerates as a serial device, i.e.
+`/dev/ttyACM0` or `/dev/ttyUSB0` appears instead of `can0`):
+
+```bash
+sudo apt install can-utils
+sudo slcan_attach -f -s8 -o /dev/ttyACM0    # -s8 = 1 Mbit/s
+sudo ip link set slcan0 up
+ros2 launch ak_motor_driver cable_control.launch.py can_interface:=slcan0
+```
+
+## 11. Performance notes
+
+- The 100 Hz poll loop (`poll_rate_hz`) uses a tiny fraction of one Pi 5 core; the
+  cable-control + torque-controller + waveform-reference stack runs comfortably.
+- For `ros2 bag record` calibration runs, write bags to a fast card/NVMe and keep
+  Wi-Fi power-save off (or record over wired Ethernet).
+- Keep the Pi cool (active cooler or case fan) — sustained CAN + DDS + builds throttle
+  a bare Pi 5.
