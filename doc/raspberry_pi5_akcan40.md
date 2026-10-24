@@ -152,7 +152,7 @@ they appear as a serial port, not `can0`, until you flash candleLight firmware. 
 what you have:
 
 ```bash
-lsusb                                 # candleLight/gs_usb firmware → 1d50:606f; ST serial → 0483:5740
+lsusb                                 # candleLight/gs_usb firmware → 1d50:606f; MKS stock slcan → 16d0:117e; ST serial → 0483:5740
 ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null
 ip -br link show | grep -i can        # can0 listed?
 dmesg | tail -20                      # look for "gs_usb" or "cdc_acm"
@@ -164,6 +164,18 @@ dmesg | tail -20                      # look for "gs_usb" or "cdc_acm"
   for native `can0` (§ 10 has links). With `slcand` your interface is `slcan0` and the
   loopback test in § 6.2 does not apply (slcan sets bitrate via the serial `S8` command,
   not netlink) — go straight to § 6.3.
+
+Real-world example — MKS CANable V2.0 Pro with factory firmware, verified on a
+Raspberry Pi 5:
+
+```console
+$ lsusb
+Bus 001 Device 005: ID 16d0:117e MCS CANable2 b158aa7 github.com/normaldotcom/canable2.git
+```
+
+`16d0:117e "MCS CANable2"` (the `b158aa7` suffix is the firmware build commit) means
+**slcan firmware** → serial `/dev/ttyACM0` → use the slcan path (§ 10a) now, or flash
+candleLight (§ 10b) for native `can0` later.
 
 ### 6.2 Test the adapter alone — loopback (no motor, no wiring needed)
 
@@ -386,7 +398,7 @@ ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
 | Symptom | Cause / fix |
 |---|---|
 | `lsusb` doesn't list the adapter | USB cable/power issue. Try another port; avoid unpowered hubs. |
-| Adapter in `lsusb` but no `can0` | `sudo modprobe gs_usb`; check `dmesg \| tail -30`. If the device shows up as `/dev/ttyACM0` instead, its firmware is serial (slcan) — see the fallback below. |
+| Adapter in `lsusb` but no `can0` | `sudo modprobe gs_usb`; check `dmesg \| tail -30`. If `lsusb` instead shows `16d0:117e "MCS CANable2"` (MKS stock firmware) or a `/dev/ttyACM0` appears, it is serial (slcan) — use `slcand` per the fallback below, or flash candleLight firmware. |
 | `RTNETLINK answers: Operation not supported` on `ip link set can0 type can` | The interface isn't a CAN device (wrong name picked, or serial firmware). Check `ip -details link`. |
 | Node runs but no `joint_state` feedback | In another terminal: `candump can0`. No frames at all → check CAN_H/CAN_L swap, termination (2 × 120 Ω), common ground, motor power. Feedback only flows **after** `enable` (MIT mode is request-response). |
 | Interface goes BUS-OFF (`ip -details link show can0` shows `bus-off`) | Usually the node transmitting before the motor is powered (no ACK). Recover: `sudo ip link set can0 down && sudo ip link set can0 up`. Power the motor first. |
@@ -412,8 +424,33 @@ ros2 launch ak_motor_driver cable_control.launch.py can_interface:=slcan0
 # stop it later with: sudo pkill slcand
 ```
 
-Persist across reboots with a systemd unit or by adding the three commands to
-`/etc/rc.local` (the § 6 udev rule only covers native `can*` interfaces).
+Persist across reboots with a systemd unit (the § 6 udev rule only covers native `can*`
+interfaces). `-F` keeps slcand in the foreground for systemd; the wrapper waits for
+`slcan0` to appear before bringing it up:
+
+```bash
+sudo tee /etc/systemd/system/slcan0.service > /dev/null << 'EOF'
+[Unit]
+Description=slcan0 SocketCAN interface for MKS CANable (slcan firmware on /dev/ttyACM0)
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c 'slcand -F -o -c -f -s8 /dev/ttyACM0 slcan0 & SLPID=$!; for i in $(seq 1 30); do ip link show slcan0 >/dev/null 2>&1 && break; sleep 0.5; done; ip link set slcan0 txqueuelen 1000; ip link set slcan0 up; wait $SLPID'
+ExecStopPost=-/bin/bash -c 'ip link set slcan0 down || true'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now slcan0.service
+ip -details link show slcan0        # state UP after boot / replug
+```
+
+> If the board ever enumerates as `/dev/ttyACM1` (other USB-serial devices present),
+> point the unit at the stable path instead: `ls -l /dev/serial/by-id/` and use the
+> `usb-MCS_CANable2*-if00` symlink.
 
 **(b) Flash candleLight firmware (recommended long-term)** — the board then enumerates
 as native gs_usb `can0` (§ 6 applies verbatim), with better behaviour under bus load:
