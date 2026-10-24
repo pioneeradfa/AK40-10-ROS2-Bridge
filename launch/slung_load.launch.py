@@ -14,7 +14,7 @@ def generate_launch_description():
     can_interface_arg = DeclareLaunchArgument(
         "can_interface",
         default_value="can0",
-        description="Linux CAN interface name. Use can0 on Ubuntu laptop, can1 on Jetson Orin.",
+        description="Linux CAN interface name. Use can0 on Ubuntu laptop / Raspberry Pi 5 (AKCAN40), can1 on Jetson Orin.",
     )
 
     return LaunchDescription([
