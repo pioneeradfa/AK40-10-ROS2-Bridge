@@ -2,6 +2,11 @@
 
 ROS 2 driver for the CubeMars AK40-10 actuator over SocketCAN.
 
+> **Running on a Raspberry Pi 5?** Start with **[PI5_QUICKSTART.md](PI5_QUICKSTART.md)** —
+> the verified 10-minute path (wiring diagram, CAN bring-up for the MKS CANable V2.0 Pro,
+> connection test, one-command motor run) on Pi OS Bookworm + ROS 2 Humble.
+> Full-length guide: [`doc/raspberry_pi5_akcan40.md`](doc/raspberry_pi5_akcan40.md).
+
 ## Prerequisites
 
 ### 1. Platform-specific CAN setup
@@ -75,6 +80,8 @@ The Pi 5 has **no on-board CAN controller**, but the CubeMars AKCAN40 USB-CAN ad
 > **MKS Makerbase CANable V2.0 / V2.0 Pro** ships with *slcan* (serial) firmware — it appears as `/dev/ttyACM0`, not `can0`. Either run it through `slcand` (interface `slcan0`, launch with `can_interface:=slcan0`) or flash candleLight firmware for native `can0`. The guide below covers both, plus a step-by-step connection test (loopback self-test → raw `cansend`/`candump` bus test → ROS 2 test).
 
 Recommended stack: **Ubuntu Server 24.04 LTS (64-bit) + ROS 2 Jazzy** (Tier-1 apt binaries). **Raspberry Pi OS Bookworm with an existing ROS 2 install (e.g. Humble) is also supported** — the Pi OS kernel ships `gs_usb` too, the CAN steps are identical, and the package builds unmodified on Humble+. Full from-scratch guide — flashing the OS, ROS 2 install, wiring, termination, boot persistence, auto-start, Raspberry Pi OS / Humble quickstart, Docker, and troubleshooting — is in **[doc/raspberry_pi5_akcan40.md](doc/raspberry_pi5_akcan40.md)**.
+The shortest verified path (wiring → CAN up → connection test → one-command run) is in
+**[PI5_QUICKSTART.md](PI5_QUICKSTART.md)**.
 
 **Every reboot — bring up can0 (recommended):**
 
@@ -132,6 +139,15 @@ ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can1
 
 # Raspberry Pi 5 (AKCAN40 dongle is can0 — the default)
 ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
+```
+
+**One-command alternative** (brings CAN up, launches, publishes `~/command`, enables;
+Ctrl+C disables the motor first — run without sudo):
+
+```bash
+./scripts/run_motor.sh pos 1.0        # position hold at 1.0 rad (green LED on)
+./scripts/run_motor.sh speed 0.5      # velocity mode at 0.5 rad/s
+./scripts/run_motor.sh speed -0.5 20  # timed: 20 s then auto-disable
 ```
 
 ## Operating sequence
