@@ -436,7 +436,14 @@ ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
 enumerates as a serial device (`/dev/ttyACM0` or `/dev/ttyUSB0`) instead of `can0`, it is
 running slcan firmware. Two options:
 
-**(a) Run it as-is via `slcand`** (fine at 1 Mbps; interface name `slcan0`):
+**(a) Run it as-is via `slcand`** (fine at 1 Mbps; interface name `slcan0`). The setup
+script detects a serial adapter and does this automatically, so you can just re-run it:
+
+```bash
+sudo ./scripts/setup_can_pi5.sh        # finds /dev/ttyACM0 → brings up slcan0 itself
+```
+
+or manually:
 
 ```bash
 sudo apt install -y can-utils
