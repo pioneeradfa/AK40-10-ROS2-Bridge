@@ -17,13 +17,22 @@ module build is needed (unlike Jetson Orin, see
 | Raspberry Pi OS Bookworm (Debian 12) arm64 | Humble (or any working install) | Supported — the driver builds unmodified; see § 9. The CAN steps (§ 6) are identical. |
 
 ```
-┌────────────────┐  USB   ┌──────────┐  CAN @ 1 Mbps   ┌──────────────────┐  24 V  ┌──────────┐
-│ Raspberry Pi 5 │───────►│  AKCAN40 │────H/L─────────►│ AK40-10 driver   │◄───────│ 24 V PSU │
-│ (ROS 2 Jazzy)  │        │  (can0)  │   120 Ω both ends│ board (GH1.25)   │        └──────────┘
-└────────────────┘        └──────────┘                 └──────────────────┘
-        ▲                                                       │
-        └──────────────── GND tied together ────────────────────┘
+   USB (stock slcan fw → /dev/ttyACM0 → slcan0 · candleLight fw → native can0)
+  ┌───────────────┐        ┌──────────────────────────┐        ┌─────────────────────┐
+  │ Raspberry Pi 5│───────►│ MKS CANable V2.0 Pro     │        │ AK40-10 driver board│
+  │               │        │  CANH ───────────────────┼───────►│ CAN pin 2 (CAN_H)   │
+  │               │        │  CANL ───────────────────┼───────►│ CAN pin 1 (CAN_L)   │
+  │               │        │  120R DIP switch = ON    │        │ CAN pins 3/4: open  │
+  │               │        │        (termination #1)  │        │ XT30 2 = +24 V  ◄───┼── V+  ┌──────────┐
+  └──────────────┘        ──────────┬───────────────┘        │ XT30 1 = −      ◄───── V− ─│ 24 V PSU │
+         │ GPIO GND (pin 6)           │ CAN-side GND           └─────────────────────┘       └──────────┘
+         └──────────────┬─────────────┘                                     ▲         ▲
+                        └──────── common GND: star point at PSU V− ─────────┴─────────
+                          + add 120R across CAN_H–CAN_L at motor end (termination #2)
 ```
+
+A full vector version of this diagram is at
+[`doc/media/connection_diagram_pi5_canable_ak40.svg`](media/connection_diagram_pi5_canable_ak40.svg).
 
 ---
 
@@ -41,19 +50,35 @@ module build is needed (unlike Jetson Orin, see
 
 ## 2. Wiring
 
-1. **CAN:** connect the AKCAN40's `CAN_H` → driver-board CAN cable `CAN_H`, and
-   `CAN_L` → `CAN_L`. Pinout of the AK 4-pin GH1.25 CAN connector is in the driver
-   manual PDF under [`doc/`](.) (and on the CubeMars product page). If in doubt,
-   swap H/L and re-test — a swapped pair simply produces no frames, nothing breaks.
-2. **Termination:** the CAN bus needs **120 Ω at each physical end** (24 V PSU end and
-   adapter end). MKS CANable V2.0/Pro boards carry an on-board 120 Ω enabled by a
-   **shorting cap** — fit it. Check whether your AKCAN40 has a termination
-   jumper/solder bridge; the AK40-10 driver board does not terminate the bus. If the
-   motor end is unterminated, solder/wire a 120 Ω resistor across `CAN_H`–`CAN_L` near
-   the motor. A bus with wrong termination shows up as constant error frames / BUS-OFF.
-3. **Ground:** tie the Pi's GND to the motor PSU GND (e.g. Pi GPIO GND pin → PSU V−).
-   Separate supplies without a common reference cause flaky CAN and can damage ports.
+![Connection diagram: Raspberry Pi 5 + MKS CANable V2.0 Pro + AK40-10 + 24 V PSU](media/connection_diagram_pi5_canable_ak40.svg)
+
+| From | Connector / pin | Signal | To |
+|---|---|---|---|
+| Raspberry Pi 5 | USB-A port (any) | USB | CANable V2.0 Pro USB plug |
+| MKS CANable V2.0 Pro | CAN terminal **CANH** | CAN high | AK CAN harness `CAN_H` = driver-board CAN connector **pin 2** (or 3) |
+| MKS CANable V2.0 Pro | CAN terminal **CANL** | CAN low | AK CAN harness `CAN_L` = driver-board CAN connector **pin 1** (or 4) |
+| MKS CANable V2.0 Pro | CAN terminal **GND** (isolated side) | CAN-side reference | 24 V PSU **V−** (star ground) |
+| MKS CANable V2.0 Pro | **120 Ω DIP switch → ON** | bus termination #1 | — |
+| AK40-10 driver board | CAN 4-pin GH1.25, pins 3/4 | duplicate H/L for daisy-chaining | **leave open** |
+| AK40-10 driver board | XT30 power, **pin 2** | +24 V | PSU **V+** |
+| AK40-10 driver board | XT30 power, **pin 1** | − | PSU **V−** |
+| Raspberry Pi 5 | GPIO header **pin 6** (GND) | reference | PSU **V−** (same star point) |
+| *(add)* | across `CAN_H`–`CAN_L` at the motor end | 120 Ω resistor | bus termination #2 |
+
+1. **CAN:** CANable `CANH` → harness `CAN_H`, `CANL` → `CAN_L`. Pinout per the driver
+   manual (also in [`doc/`](.) PDF): 4-pin GH1.25 = 1 `CAN_L`, 2 `CAN_H`, 3 `CAN_H`,
+   4 `CAN_L`. If in doubt, swap H/L and re-test — a swapped pair simply produces no
+   frames, nothing breaks.
+2. **Termination:** the CAN bus needs **120 Ω at each physical end**. On the CANable
+   V2.0/Pro set the on-board **120 Ω DIP slide switch to ON** (termination #1). The
+   AK40-10 driver board does not terminate the bus, so add a 120 Ω resistor across
+   `CAN_H`–`CAN_L` at the motor end (termination #2). Wrong termination shows up as
+   constant error frames / BUS-OFF.
+3. **Ground:** tie Pi GPIO GND (pin 6) **and** the CANable CAN-side GND to the PSU V−
+   at one star point. Separate supplies without a common reference cause flaky CAN
+   and can damage ports.
 4. **Power:** motor → 24 V PSU via the XT30 power cable. Pi → its own 5 V USB-C PSU.
+   Power the motor **before** launching the node or sending CAN frames.
 
 ## 3. Flash Ubuntu Server 24.04 LTS (64-bit)
 

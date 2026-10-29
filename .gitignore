@@ -18,3 +18,4 @@ Makefile
 # Python cache
 __pycache__/
 *.pyc
+image-search/
