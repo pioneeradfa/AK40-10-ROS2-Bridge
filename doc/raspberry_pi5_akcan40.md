@@ -300,6 +300,11 @@ ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
 an Ubuntu laptop — the Orin's `can1` does not apply here), so the argument can be
 omitted.
 
+> **Motor prerequisite:** the AK40-10 must be in **MIT (force-control) mode** with
+> **CAN ID 1** — the factory default and the only mode the MIT protocol works in.
+> The node's `motor_id` parameter defaults to 1 to match. If the ID was ever changed
+> with CubeMarsTool/R-Link, set `motor_id` in the config (or re-flash the ID) to match.
+
 Then follow the normal **[Operating sequence](../README.md#operating-sequence)** in the
 README: set encoder zero (while disabled) → set gains → publish `~/command` →
 `enable` → move → `disable` before stopping the node.
