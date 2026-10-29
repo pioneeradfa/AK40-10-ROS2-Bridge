@@ -10,8 +10,9 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
-set(_deps rclcpp sensor_msgs std_msgs std_srvs)
+set(_deps rclcpp sensor_msgs std_msgs std_srvs geometry_msgs)
 
 # ── SocketCAN wrapper ──────────────────────────────────────────────────────────
 add_library(can_socket src/can_socket.cpp)
@@ -78,10 +79,19 @@ add_executable(cable_direct_torque_node src/cable_direct_torque_node.cpp)
 target_compile_features(cable_direct_torque_node PRIVATE cxx_std_17)
 ament_target_dependencies(cable_direct_torque_node ${_deps})
 
-# ── Install ───────────────────────────────────────────────────────────────────
+# ── Differential drive node (two AK40-10 wheels, one CAN bus) ────────────────
+add_executable(diff_drive_node src/diff_drive_node.cpp)
+target_include_directories(diff_drive_node PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_compile_features(diff_drive_node PRIVATE cxx_std_17)
+target_link_libraries(diff_drive_node can_socket ak40_codec)
+ament_target_dependencies(diff_drive_node ${_deps})
+
+# ── Install ──────────────────────────────────────────────────────────────────
 install(TARGETS can_socket ak40_codec ak_motor_node slung_load_node
   ak_motor_cable_control_node cable_torque_ctrl_node cable_sine_ref_node
   cable_square_ref_node cable_triangle_ref_node cable_pos_ref_node cable_direct_torque_node
+  diff_drive_node
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})

@@ -1,0 +1,30 @@
+diff_drive_node:
+  ros__parameters:
+    can_interface: "can0"
+    motor_id_left: 1
+    motor_id_right: 2
+    poll_rate_hz: 100.0
+    # Velocity-mode damping for both wheels (kp is always 0 while driving)
+    kd_drive: 0.5
+    # Robot geometry — MEASURE THESE ON YOUR CHASSIS
+    wheel_radius: 0.1     # m
+    track_width: 0.4      # m, wheel centre to wheel centre
+    gear_ratio: 10.0      # AK40-10 reduction 10:1 -> motor rad/s per wheel rad/s
+    # Presets used by ~/move_cmd strings
+    linear_speed: 0.5     # m/s for "forward" / "backward"
+    turn_speed: 1.0       # rad/s for "left" / "right" (pivot turn in place)
+    # Set true if a motor is mounted mirrored (wheel spins backwards)
+    invert_left: false
+    invert_right: false
+    # cmd_vel watchdog: stale cmd_vel falls back to latched move_cmd
+    command_timeout_ms: 500.0
+    temp_limit_c: 75.0    # auto-disable BOTH motors above this
+    # AK40-10 MIT-mode physical limits
+    p_min: -12.5
+    p_max:  12.5
+    v_min: -45.5
+    v_max:  45.5
+    t_min: -5.0
+    t_max:  5.0
+    kp_max: 500.0
+    kd_max: 5.0

@@ -480,6 +480,64 @@ ros2 service call /cable_torque_ctrl_node/disarm std_srvs/srv/Trigger
 
 **GUI then closes external mode (outer gate: STANDBY → OFF) via `ext_mode_cmd="off"`.**
 
+## Differential drive wheeled robot (2 × AK40-10)
+
+`diff_drive_node` drives **two motors on one CAN bus** (default left = ID 1, right = ID 2)
+in velocity mode (`kp=0, kd=kd_drive`) from a single node — forward, backward, pivot
+turns and stop for a two-wheel robot.
+
+```bash
+ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0   # or can0
+```
+
+**Five motion commands** (latched — one publish keeps the robot moving until the next):
+
+```bash
+./scripts/drive.sh enable      # both motors → MIT mode (do once)
+./scripts/drive.sh forward     # linear_speed preset (m/s)
+./scripts/drive.sh backward
+./scripts/drive.sh left        # pivot turn in place, turn_speed preset (rad/s)
+./scripts/drive.sh right
+./scripts/drive.sh stop        # zero-velocity hold
+./scripts/drive.sh disable     # ALWAYS the last command
+```
+
+**Standard ROS interface** also works — `~/cmd_vel` (`geometry_msgs/Twist`,
+`linear.x` m/s + `angular.z` rad/s), so keyboard teleop drives it directly:
+
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard_node \
+  --ros-args -r cmd_vel:=/diff_drive_node/cmd_vel
+```
+
+Fresh `cmd_vel` overrides the latched `move_cmd`; when `cmd_vel` goes stale
+(`command_timeout_ms`, default 500 ms) the node falls back to the latched command —
+publish `stop` (or `./scripts/drive.sh stop`) to park.
+
+**Kinematics:** `v_wheel = (linear.x ∓ angular.z·track_width/2) / wheel_radius`,
+motor speed = wheel speed × `gear_ratio` (AK40-10 = 10:1). Measure `wheel_radius`
+and `track_width` on your chassis in `config/diff_drive_params.yaml`.
+
+**First-run wheel direction check:** `enable` → `forward` → both wheels must roll
+forward. If one rolls backward, set `invert_left: true` or `invert_right: true` in
+`config/diff_drive_params.yaml` (mirrored motor mounts), rebuild-free — just relaunch.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `motor_id_left` / `motor_id_right` | `1` / `2` | CAN IDs of the two actuators |
+| `wheel_radius` | `0.1` m | wheel radius |
+| `track_width` | `0.4` m | wheel centre-to-centre |
+| `gear_ratio` | `10.0` | motor rad/s per wheel rad/s |
+| `linear_speed` / `turn_speed` | `0.5` / `1.0` | presets for move_cmd strings |
+| `kd_drive` | `0.5` | velocity-mode damping on both wheels |
+| `invert_left` / `invert_right` | `false` | flip mirrored motor mounts |
+| `command_timeout_ms` | `500` | stale cmd_vel → fall back to latched move_cmd |
+| `temp_limit_c` | `75` | either motor overtemp → **both** auto-disable |
+
+Feedback: `~/joint_state` (names `wheel_left`, `wheel_right`: position rad,
+velocity rad/s, torque Nm) and `~/temperature` (`[left, right]` °C). The node sends
+exit-MIT to both motors on `disable` and on shutdown.
+
 ## Control modes
 
 The MIT protocol computes output torque as:
