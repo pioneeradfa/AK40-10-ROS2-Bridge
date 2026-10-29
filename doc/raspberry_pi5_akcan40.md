@@ -322,6 +322,15 @@ ros2 topic echo /ak_motor_node/joint_state        # feedback flowing → CAN lin
 ros2 service call /ak_motor_node/disable std_srvs/srv/Trigger   # ALWAYS disable when done
 ```
 
+**What a normal run looks like** (verified on Pi 5 + MKS CANable V2.0 Pro):
+
+| Observation | Meaning |
+|---|---|
+| Driver-board LED **green** while enabled | Board powered & healthy, motor in MIT mode tracking commands. Red/blinking → read `~/error_flags` and § 10. |
+| `joint_state` ≈ 100 Hz after `enable` | Feedback path OK (MIT is request-response: replies only exist while command frames flow). |
+| `disable` → `success=True, message='Motor disabled'` | Node sent the exit-MIT frame (`001#…FD`). |
+| Shaft goes **free** and `joint_state` stops after `disable` | Expected, not a fault: outside MIT mode the motor produces no torque and sends no replies. Re-`enable` to drive it again. |
+
 ## 8. Optional: auto-start the node at boot
 
 With `setup_can_pi5.sh --persist` done (§ 6), CAN is up before the node starts.
