@@ -46,6 +46,30 @@ for _ in 1 2 3 4 5; do
 done
 
 if ! ip link show "$CAN_IF" >/dev/null 2>&1; then
+  # Auto-fallback: serial-enumerating adapter (MKS CANable stock firmware) -> slcan
+  TTY_DEV="$(ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null | head -1 || true)"
+  if [ -n "$TTY_DEV" ]; then
+    echo "No '$CAN_IF' interface, but found a serial CAN adapter at $TTY_DEV"
+    echo "(MKS CANable stock slcan firmware). Bringing up slcan0 at 1 Mbps..."
+    if ! command -v slcand >/dev/null 2>&1; then
+      echo "ERROR: slcand not found. Install it: sudo apt install -y can-utils" >&2
+      exit 1
+    fi
+    if ip link show slcan0 >/dev/null 2>&1; then
+      echo "slcan0 already exists -- reusing it."
+    else
+      slcand -o -c -f -s8 "$TTY_DEV" slcan0
+      ip link set slcan0 txqueuelen 1000
+      ip link set slcan0 up
+    fi
+    echo "slcan0 is up:"
+    ip link show slcan0
+    echo ""
+    echo "Launch the node with:  can_interface:=slcan0"
+    echo "For boot persistence see doc/raspberry_pi5_akcan40.md section 10 (slcan0.service)."
+    exit 0
+  fi
+
   echo "ERROR: interface '$CAN_IF' not found." >&2
   echo "Hints:" >&2
   echo "  lsusb                          # is the adapter visible on USB?" >&2
