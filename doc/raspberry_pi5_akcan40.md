@@ -337,6 +337,7 @@ ros2 service call /ak_motor_node/disable std_srvs/srv/Trigger   # ALWAYS disable
 single call — and disables the motor first whenever it exits (Ctrl+C included):
 
 ```bash
+./scripts/run_motor.sh deg 90          # ANGLE control: hold at 90 degrees
 ./scripts/run_motor.sh                 # position hold at 1.0 rad until Ctrl+C
 ./scripts/run_motor.sh pos 1.5         # position hold at 1.5 rad
 ./scripts/run_motor.sh speed 0.5       # velocity mode at 0.5 rad/s

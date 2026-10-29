@@ -72,6 +72,7 @@ cansend slcan0 001#FFFFFFFFFFFFFFFC   # terminal B — enter MIT mode
 ## 5. Run the motor — one command
 
 ```bash
+./scripts/run_motor.sh deg 90         # ANGLE control: hold at 90 degrees
 ./scripts/run_motor.sh pos 1.0        # move to 1.0 rad & hold (green LED on)
 ./scripts/run_motor.sh speed 0.5      # spin at 0.5 rad/s
 ./scripts/run_motor.sh speed -0.5 20  # timed run: 20 s then auto-disable

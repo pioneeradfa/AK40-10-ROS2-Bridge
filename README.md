@@ -9,71 +9,7 @@ ROS 2 driver for the CubeMars AK40-10 actuator over SocketCAN.
 
 ## Prerequisites
 
-### 1. Platform-specific CAN setup
-
-#### Ubuntu laptop (standard kernel)
-
-The USB-to-CAN dongle (CANable / gs_usb compatible) appears directly as `can0`. No extra steps needed — `gs_usb` ships in the standard kernel.
-
-**Every reboot — bring up can0 (recommended):**
-
-```bash
-sudo ./scripts/setup_can_laptop.sh
-```
-
-**Backup — manual commands:**
-
-```bash
-sudo ip link set can0 down
-sudo ip link set can0 up type can bitrate 1000000
-ip link show can0   # should show state UP, bitrate 1000000
-```
-
-#### Jetson Orin (Tegra kernel)
-
-The Tegra kernel (`5.15.x-tegra`) does **not** include `gs_usb`. The native MTTCAN controller occupies `can0`; the USB dongle needs `gs_usb` built manually and appears as `can1`.
-
-**One-time setup — build and install gs_usb:**
-
-```bash
-sudo apt install nvidia-l4t-kernel-headers
-mkdir ~/gs_usb_build && cd ~/gs_usb_build
-wget https://raw.githubusercontent.com/torvalds/linux/v5.15/drivers/net/can/usb/gs_usb.c
-cat > Makefile << 'EOF'
-obj-m += gs_usb.o
-
-all:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
-
-clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-EOF
-make
-sudo mkdir -p /lib/modules/$(uname -r)/kernel/drivers/net/can/usb/
-sudo cp gs_usb.ko /lib/modules/$(uname -r)/kernel/drivers/net/can/usb/
-sudo depmod -a
-# Auto-load on every boot
-echo "gs_usb" | sudo tee /etc/modules-load.d/gs_usb.conf
-```
-
-**Every reboot — bring up can1 (recommended):**
-
-```bash
-sudo ./scripts/setup_can_orin.sh
-```
-
-**Backup — manual commands:**
-
-```bash
-# sudo modprobe gs_usb is NOT needed after reboot — the modules-load.d entry above handles it automatically
-sudo ip link set can1 type can bitrate 1000000
-sudo ip link set can1 up
-ip link show can1   # should show state UP, bitrate 1000000
-```
-
-> **Why can1 and not can0?** The Jetson Orin has a built-in MTTCAN controller that always claims `can0`. The USB dongle is enumerated as the next available interface, `can1`. The native `can0` requires an external CAN transceiver chip wired to the GPIO header — if you use that path instead, pass `can_interface:=can0`.
-
-#### Raspberry Pi 5 (AKCAN40 USB-CAN adapter)
+### 1. CAN setup (Raspberry Pi 5)
 
 The Pi 5 has **no on-board CAN controller**, but the CubeMars AKCAN40 USB-CAN adapter (and any CANable / gs_usb-compatible dongle) works out of the box: the standard Pi kernel (Ubuntu 24.04 and Raspberry Pi OS) ships `gs_usb`, and the adapter claims `can0`. No kernel module build is needed.
 
@@ -118,37 +54,29 @@ source install/setup.bash
 ### Step 1 — bring up the CAN interface (run once per reboot)
 
 ```bash
-# Ubuntu laptop
-sudo ./scripts/setup_can_laptop.sh
-
-# Jetson Orin
-sudo ./scripts/setup_can_orin.sh
-
-# Raspberry Pi 5 (AKCAN40 dongle)
-sudo ./scripts/setup_can_pi5.sh
+sudo ./scripts/setup_can_pi5.sh    # brings up can0 (gs_usb) or slcan0 (MKS CANable stock fw)
 ```
 
 ### Step 2 — launch the node
 
 ```bash
-# Ubuntu laptop (defaults to can0)
-ros2 launch ak_motor_driver cable_control.launch.py
-
-# Jetson Orin (USB dongle is can1)
-ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can1
-
-# Raspberry Pi 5 (AKCAN40 dongle is can0 — the default)
-ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0
+ros2 launch ak_motor_driver cable_control.launch.py can_interface:=can0   # or slcan0
 ```
 
 **One-command alternative** (brings CAN up, launches, publishes `~/command`, enables;
 Ctrl+C disables the motor first — run without sudo):
 
 ```bash
+./scripts/run_motor.sh deg 90         # ANGLE control: hold at 90 degrees
 ./scripts/run_motor.sh pos 1.0        # position hold at 1.0 rad (green LED on)
 ./scripts/run_motor.sh speed 0.5      # velocity mode at 0.5 rad/s
 ./scripts/run_motor.sh speed -0.5 20  # timed: 20 s then auto-disable
 ```
+
+Angles/positions are relative to the stored encoder zero
+(`ros2 service call /ak_motor_cable_control_node/zero_position std_srvs/srv/Trigger`,
+motor must be disabled). `deg` accepts −716…716° (the ±12.5 rad MIT range); values
+outside are clamped by the node.
 
 ## Operating sequence
 
@@ -586,11 +514,11 @@ ros2 topic pub --rate 50 /ak_motor_node/command sensor_msgs/msg/JointState \
 
 ## Debugging
 
-Verify raw CAN traffic (use `can1` on Jetson Orin):
+Verify raw CAN traffic:
 
 ```bash
-candump can0      # Ubuntu laptop / Raspberry Pi 5
-candump can1      # Jetson Orin
+candump can0      # gs_usb / candleLight firmware
+candump slcan0    # MKS CANable stock slcan firmware
 ```
 
 Verify node is subscribed to commands:

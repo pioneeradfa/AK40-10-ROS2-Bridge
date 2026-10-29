@@ -5,6 +5,7 @@
 #
 # Usage:
 #   ./scripts/run_motor.sh                  # position hold at 1.0 rad until Ctrl+C
+#   ./scripts/run_motor.sh deg 90           # ANGLE control: hold at 90 degrees
 #   ./scripts/run_motor.sh pos 1.5          # position hold at 1.5 rad
 #   ./scripts/run_motor.sh speed 0.5        # velocity mode at 0.5 rad/s
 #   ./scripts/run_motor.sh speed -0.5 20    # velocity mode for 20 s, then auto-disable
@@ -79,6 +80,12 @@ done
 
 # ── command publisher FIRST (command watchdog), then enable ──────────────────
 case "$MODE" in
+  deg)
+    # angle control: convert degrees -> radians for the MIT command
+    POS=$(awk -v d="$TARGET" 'BEGIN{printf "%.6f", d*3.141592653589793/180}')
+    VEL=0.0
+    ros2 topic pub --once "$NODE/mode_cmd" std_msgs/msg/String "{data: 'pos'}" >/dev/null 2>&1
+    ;;
   pos)
     POS="$TARGET"; VEL=0.0
     ros2 topic pub --once "$NODE/mode_cmd" std_msgs/msg/String "{data: 'pos'}" >/dev/null 2>&1
@@ -87,7 +94,7 @@ case "$MODE" in
     POS=0.0; VEL="$TARGET"
     ;;
   *)
-    echo "ERROR: mode must be 'pos' or 'speed' (got '$MODE')." >&2
+    echo "ERROR: mode must be 'deg', 'pos' or 'speed' (got '$MODE')." >&2
     cleanup; exit 1
     ;;
 esac
@@ -99,7 +106,7 @@ sleep 1
 
 echo ">> Enabling motor..."
 ros2 service call "$NODE/enable" std_srvs/srv/Trigger
-echo ">> RUNNING: mode=$MODE target=$TARGET (green LED on). Ctrl+C stops & disables."
+echo ">> RUNNING: mode=$MODE target=$TARGET (pos=${POS} rad, vel=${VEL} rad/s). Ctrl+C stops & disables."
 
 if [ "$DURATION" != "0" ]; then
   sleep "$DURATION"
