@@ -343,6 +343,12 @@ single call — and disables the motor first whenever it exits (Ctrl+C included)
 ./scripts/run_motor.sh speed -0.5 20   # velocity mode for 20 s, then auto-disable
 ```
 
+Run it **without sudo** — it elevates privileges by itself only for the CAN setup step:
+
+```bash
+./scripts/run_motor.sh pos 1.0        # NOT: sudo ./scripts/run_motor.sh
+```
+
 The script sources ROS 2 and the workspace by itself (Humble or Jazzy), picks the live
 CAN interface (`can0` / `slcan0` / `can1`, running `setup_can_pi5.sh` if none is up),
 publishes `~/command` at 50 Hz **before** calling `~/enable` (watchdog-safe), and prints

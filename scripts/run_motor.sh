@@ -12,7 +12,8 @@
 # Works on Raspberry Pi 5 (can0 or slcan0), Ubuntu laptop (can0) and Jetson Orin
 # (can1 is picked up automatically if it is the only interface up).
 
-set -u
+# NOTE: do not use 'set -u' here — sourcing colcon/ament setup.bash references
+# unbound variables (COLCON_TRACE etc.) and would abort under nounset.
 
 MODE="${1:-pos}"
 TARGET="${2:-1.0}"
@@ -20,6 +21,10 @@ DURATION="${3:-0}"        # seconds; 0 = run until Ctrl+C
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NODE="/ak_motor_cable_control_node"
+
+if [ "$(id -u)" -eq 0 ]; then
+  echo "NOTE: run this script WITHOUT sudo; it asks for sudo itself only for CAN setup."
+fi
 
 # ── ROS 2 environment ────────────────────────────────────────────────────────
 if [ -z "${ROS_DISTRO:-}" ]; then
