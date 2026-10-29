@@ -482,12 +482,16 @@ ros2 service call /cable_torque_ctrl_node/disarm std_srvs/srv/Trigger
 
 ## Differential drive wheeled robot (2 × AK40-10)
 
-`diff_drive_node` drives **two motors on one CAN bus** (default left = ID 1, right = ID 2)
-in velocity mode (`kp=0, kd=kd_drive`) from a single node — forward, backward, pivot
+`diff_drive_node` drives **two motors on one CAN bus** (this rig: left = ID 1,
+right = ID 6 — set via `motor_id_left` / `motor_id_right` in
+`config/diff_drive_params.yaml` or as launch arguments) in velocity mode
+(`kp=0, kd=kd_drive`) from a single node — forward, backward, pivot
 turns and stop for a two-wheel robot.
 
 ```bash
 ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0   # or can0
+# override IDs without editing config:
+ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0 motor_id_right:=6
 ```
 
 **Five motion commands** (latched — one publish keeps the robot moving until the next):
@@ -526,7 +530,7 @@ forward. If one rolls backward, set `invert_left: true` or `invert_right: true` 
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `motor_id_left` / `motor_id_right` | `1` / `2` | CAN IDs of the two actuators |
+| `motor_id_left` / `motor_id_right` | `1` / `6` | CAN IDs of the two actuators (launch args or config) |
 | `wheel_radius` | `0.1` m | wheel radius |
 | `track_width` | `0.4` m | wheel centre-to-centre |
 | `gear_ratio` | `10.0` | motor rad/s per wheel rad/s |
@@ -545,10 +549,11 @@ exit-MIT to both motors on `disable` and on shutdown.
 ```bash
 ./scripts/drive.sh disable
 candump slcan0 &                       # watch the bus (terminal A)
-cansend slcan0 002#FFFFFFFFFFFFFFFC    # ask motor 2 to enter MIT (terminal B)
+cansend slcan0 006#FFFFFFFFFFFFFFFC    # ask the right motor at ITS id (here 6) to enter MIT
 ```
 
-- Reply `002 [8] 02 …` → motor 2 is alive at ID 2: re-enable and watch
+- Reply `006 [8] 06 …` (data[0] echoes the ID) → motor is alive at that ID: make sure
+  `motor_id_right` matches it, re-enable and watch
   `ros2 topic echo /diff_drive_node/joint_state` (both wheels must appear).
 - **No reply** → one of: (a) motor 2's CAN ID is not 2 — power motor 2 *alone* and
   `cansend slcan0 001#FFFFFFFFFFFFFFFC`; if it answers, it is still ID 1: re-flash the

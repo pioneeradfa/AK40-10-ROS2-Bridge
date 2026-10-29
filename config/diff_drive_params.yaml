@@ -2,7 +2,7 @@ diff_drive_node:
   ros__parameters:
     can_interface: "can0"
     motor_id_left: 1
-    motor_id_right: 2
+    motor_id_right: 6      # this rig: right wheel is CAN ID 6 (edit to match your motors)
     poll_rate_hz: 100.0
     # Velocity-mode damping for both wheels (kp is always 0 while driving)
     kd_drive: 0.5
