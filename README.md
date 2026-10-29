@@ -503,12 +503,14 @@ ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0   # or ca
 ```
 
 **Standard ROS interface** also works — `~/cmd_vel` (`geometry_msgs/Twist`,
-`linear.x` m/s + `angular.z` rad/s), so keyboard teleop drives it directly:
+`linear.x` m/s + `angular.z` rad/s). Keyboard teleop with **no extra packages**:
 
 ```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard_node \
-  --ros-args -r cmd_vel:=/diff_drive_node/cmd_vel
+ros2 run ak_motor_driver teleop_drive.py     # w/s/a/d move, x stop, q quit
 ```
+
+(Prefer the stock package? `sudo apt install ros-<distro>-teleop-twist-keyboard`, then
+`ros2 run teleop_twist_keyboard teleop_twist_keyboard_node --ros-args -r cmd_vel:=/diff_drive_node/cmd_vel`.)
 
 Fresh `cmd_vel` overrides the latched `move_cmd`; when `cmd_vel` goes stale
 (`command_timeout_ms`, default 500 ms) the node falls back to the latched command —
@@ -537,6 +539,24 @@ forward. If one rolls backward, set `invert_left: true` or `invert_right: true` 
 Feedback: `~/joint_state` (names `wheel_left`, `wheel_right`: position rad,
 velocity rad/s, torque Nm) and `~/temperature` (`[left, right]` °C). The node sends
 exit-MIT to both motors on `disable` and on shutdown.
+
+**If only one motor enables (one green LED):** test motor 2 directly on the bus:
+
+```bash
+./scripts/drive.sh disable
+candump slcan0 &                       # watch the bus (terminal A)
+cansend slcan0 002#FFFFFFFFFFFFFFFC    # ask motor 2 to enter MIT (terminal B)
+```
+
+- Reply `002 [8] 02 …` → motor 2 is alive at ID 2: re-enable and watch
+  `ros2 topic echo /diff_drive_node/joint_state` (both wheels must appear).
+- **No reply** → one of: (a) motor 2's CAN ID is not 2 — power motor 2 *alone* and
+  `cansend slcan0 001#FFFFFFFFFFFFFFFC`; if it answers, it is still ID 1: re-flash the
+  ID to 2 with CubeMarsTool/R-Link. (b) daisy-chain wiring — the bus must run
+  adapter → motor 1 pins 1/2, then **motor 1 pins 3/4 → motor 2 pins 1/2**
+  (pins 3/4 are the daisy-chain duplicates). (c) motor 2 power or CAN stub loose.
+- Termination belongs only at the two physical ends of the chain (adapter DIP switch
+  ON + 120 Ω at motor 2). The mid-bus motor 1 must **not** be terminated.
 
 ## Control modes
 
