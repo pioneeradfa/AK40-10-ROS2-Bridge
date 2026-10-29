@@ -331,6 +331,23 @@ ros2 service call /ak_motor_node/disable std_srvs/srv/Trigger   # ALWAYS disable
 | `disable` → `success=True, message='Motor disabled'` | Node sent the exit-MIT frame (`001#…FD`). |
 | Shaft goes **free** and `joint_state` stops after `disable` | Expected, not a fault: outside MIT mode the motor produces no torque and sends no replies. Re-`enable` to drive it again. |
 
+### 7.1 One-command run (no extra terminals)
+
+`scripts/run_motor.sh` folds CAN bring-up, launch, command publishing and enable into a
+single call — and disables the motor first whenever it exits (Ctrl+C included):
+
+```bash
+./scripts/run_motor.sh                 # position hold at 1.0 rad until Ctrl+C
+./scripts/run_motor.sh pos 1.5         # position hold at 1.5 rad
+./scripts/run_motor.sh speed 0.5       # velocity mode at 0.5 rad/s
+./scripts/run_motor.sh speed -0.5 20   # velocity mode for 20 s, then auto-disable
+```
+
+The script sources ROS 2 and the workspace by itself (Humble or Jazzy), picks the live
+CAN interface (`can0` / `slcan0` / `can1`, running `setup_can_pi5.sh` if none is up),
+publishes `~/command` at 50 Hz **before** calling `~/enable` (watchdog-safe), and prints
+the enable response. Keep hands clear of the mechanism — the motor moves immediately.
+
 ## 8. Optional: auto-start the node at boot
 
 With `setup_can_pi5.sh --persist` done (§ 6), CAN is up before the node starts.
