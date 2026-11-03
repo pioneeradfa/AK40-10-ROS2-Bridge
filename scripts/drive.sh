@@ -34,10 +34,12 @@ case "$CMD" in
     ros2 service call "$NODE/disable" std_srvs/srv/Trigger
     ;;
   forward|backward|left|right|stop)
-    # Burst for ~1 s instead of --once: a single message can be lost while DDS
-    # discovery matches the new publisher to the node's subscription. The node
-    # latches move_cmd, so one delivered message is enough.
-    timeout 1.2 ros2 topic pub --rate 5 "$NODE/move_cmd" std_msgs/msg/String "{data: '$CMD'}" >/dev/null 2>&1
+    # Burst for ~4 s instead of --once: (a) a single message can be lost while DDS
+    # discovery matches the new publisher to the node's subscription, and (b) on the
+    # Pi a source-build Humble needs 1-3 s just to init the CLI node - a short
+    # timeout kills it mid-init ("context is not valid"). The node latches move_cmd,
+    # so one delivered message is enough. For reactive control use teleop_drive.py.
+    timeout 4 ros2 topic pub --rate 5 "$NODE/move_cmd" std_msgs/msg/String "{data: '$CMD'}" >/dev/null 2>&1
     ;;
   *)
     echo "Usage: $0 forward|backward|left|right|stop|enable|disable" >&2
