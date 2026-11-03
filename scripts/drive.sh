@@ -34,7 +34,10 @@ case "$CMD" in
     ros2 service call "$NODE/disable" std_srvs/srv/Trigger
     ;;
   forward|backward|left|right|stop)
-    ros2 topic pub --once "$NODE/move_cmd" std_msgs/msg/String "{data: '$CMD'}"
+    # Burst for ~1 s instead of --once: a single message can be lost while DDS
+    # discovery matches the new publisher to the node's subscription. The node
+    # latches move_cmd, so one delivered message is enough.
+    timeout 1.2 ros2 topic pub --rate 5 "$NODE/move_cmd" std_msgs/msg/String "{data: '$CMD'}" >/dev/null 2>&1
     ;;
   *)
     echo "Usage: $0 forward|backward|left|right|stop|enable|disable" >&2

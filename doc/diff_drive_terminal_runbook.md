@@ -120,4 +120,5 @@ ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0
 | No reply on any ID | motor PSU on? H/L swap? daisy-chain = motor 1 pins 3/4 → motor 2 pins 1/2 |
 | Error frames / bus-off | termination: adapter DIP ON + 120 Ω at far end only; `ip -details -statistics link show slcan0` |
 | Robot drifts in "straight" | wheel directions, then `track_width`; unequal tyre wear also pulls |
+| `drive.sh forward` does nothing | Node log shows no `move_cmd 'forward'` line → the single `--once` message was dropped by DDS discovery. Use the current `drive.sh` (publishes a 1 s burst) or `timeout 1 ros2 topic pub --rate 5 /diff_drive_node/move_cmd std_msgs/msg/String "{data: 'forward'}"`. Cross-check with `teleop_drive.py` (continuous publisher). |
 | Motor hot / stops itself | `temp_limit_c` auto-disable did its job; check `~/temperature`, reduce `kd_drive` load |
