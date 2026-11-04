@@ -148,6 +148,13 @@ echo $ROS_DOMAIN_ID                      # must match in BOTH terminals (launch 
 No log line → the message never arrived: relaunch the node
 (`./scripts/robot_up.sh`), check domain IDs, don't run `drive.sh` under sudo.
 
+**Never run `run_motor.sh` (or anything else streaming MIT frames) at the same
+time as the diff-drive node.** Both write to motor 1: the cable-control node
+holds it in position mode while diff-drive commands velocity — the commands
+fight at 100 Hz each and the wheel can sit still. `Ctrl+C` the single-motor
+test first (it exits MIT, LED off — normal), then start the diff-drive session.
+After any `git pull`, rebuild first: `colcon build --packages-select ak_motor_driver`.
+
 **2) Is the node putting non-zero velocity on the bus?** Watch while commanding:
 
 ```bash
