@@ -133,7 +133,14 @@ ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0
 ## LEDs green but the robot does not move
 
 A green LED only means "motor is in MIT mode" — it stays green even with the
-node stopped (MIT latches until exit-MIT or power-off). Work the tree:
+node stopped (MIT latches until exit-MIT or power-off).
+
+> **RESOLVED ON THIS RIG:** the root cause was a torque-demand step — commanding
+> ω\* = full scale at standstill asks τ = kd×ω\* ≈ 22.8 N·m ≈ 12× the AK40-10
+> peak (1.9 N·m); the drive trips protection and leaves MIT (one jerk, LED off).
+> The node now ramps ω\* (`accel_limit_rad_s2`) and `linear_speed` is 0.4 m/s.
+> **`git pull && colcon build --packages-select ak_motor_driver`**, restart, re-enable.
+> Details + raw-frame confirmation below (step 3). Work the tree for anything else:
 
 **1) Did `forward` reach the node?** The node logs every latched command.
 
@@ -179,6 +186,14 @@ a latched MIT command keeps applying until you send the stop frame.
 The discriminating matrix (motor 1; use `006#` for motor 2). All frames use
 p_des = 0, kp = 0, kd = 0.5 except E4; only the velocity field changes:
 
+> **Known result on this rig (confirmed):** E1 makes the motor jerk once and the
+> green LED go off — the drive trips its protection out of MIT mode because
+> τ = kd×ω\* = 0.5 × 45.5 ≈ 22.8 N·m ≈ 12× the 1.9 N·m peak. After any trip,
+> re-send E0 (or `./scripts/drive.sh enable`) to re-enter MIT. E2b (ω\* = +5 →
+> demand 2.5 N·m, clamped near peak) should spin gently without tripping — proof
+> the motor and velocity mode are fine. The node fix ramps ω\* instead of
+> stepping it, so normal driving never trips.
+
 ```bash
 cansend slcan0 001#FFFFFFFFFFFFFFFC    # E0: enter MIT (LED green)
 
@@ -204,12 +219,10 @@ Reading the results:
 
 | Result | Meaning → fix |
 |---|---|
-| E1 still, **E2/E2b spin** | firmware rejects/misreads the full-scale rail value `0xFFF` → command below the rail (lower `linear_speed`, encoder clamps v to < max) |
-| E2 spins **backwards** | firmware reads the v field as signed → codec mapping must change |
-| E1 still, **E3 spins** | kd = 0.5 too weak to overcome gearbox stiction → raise `kd_drive` |
-| E1–E3 still, **E4 moves** | velocity field dead in this firmware → position-mode driving needed |
-| E4 also still | motor/firmware state → power-cycle 24 V, re-run from E0 |
-| No reply frames at all | bus/termination/ID — frame not ACKed |
+| E1/E2/E3 **jerk + LED off**, E2b spins gently | confirmed: torque-demand step τ = kd×ω\* trips drive protection out of MIT. Fix is in the node — `accel_limit_rad_s2` ramp + `linear_speed 0.4`; rebuild, then `drive.sh forward` spins up smoothly |
+| E2b also **jerks + LED off** | power-side: PSU cannot hold 24 V under load, or motor fault state → check PSU current limit, power-cycle 24 V, retry E4 |
+| E1–E3 still (no jerk), **E4 moves** | velocity field dead in this firmware → position-mode driving needed |
+| All still, no reply frames | bus/termination/ID — frame not ACKed |
 
 Does not spin raw but spins via node frames → impossible (same bytes); if the
 node path fails while E1–E4 behave, re-check steps 1–2.
@@ -221,6 +234,7 @@ node path fails while E1–E4 behave, re-check steps 1–2.
 | `slcan0` missing | `ls /dev/ttyACM*`, re-run setup script, `lsusb` for `16d0:117e` |
 | One LED on enable | raw check on that motor's ID (§ Terminal 3); ID mismatch → CubeMarsTool |
 | LEDs green, no movement | § LEDs green but the robot does not move — 3-step tree (node alive? frames non-zero? raw spin test?) |
+| One jerk, then LED goes off | drive protection tripped out of MIT: full-scale ω* step demanded ~12× peak torque. Fixed in node (`accel_limit_rad_s2` slew + `linear_speed 0.4`) — `git pull && colcon build`, relaunch, re-enable. Raw frames that do this: E1/E2/E3 of the matrix |
 | Single-motor test works, diff-drive doesn't | Don't run both at once (both stream MIT frames to motor 1 → fight); `Ctrl+C` run_motor.sh, `colcon build`, then `./scripts/robot_up.sh` |
 | No reply on any ID | motor PSU on? H/L swap? daisy-chain = motor 1 pins 3/4 → motor 2 pins 1/2 |
 | Error frames / bus-off | termination: adapter DIP ON + 120 Ω at far end only; `ip -details -statistics link show slcan0` |

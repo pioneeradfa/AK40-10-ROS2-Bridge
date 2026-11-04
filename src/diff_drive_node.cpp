@@ -9,6 +9,8 @@
 // Fresh cmd_vel overrides the latched move_cmd; when cmd_vel goes stale the
 // latched move_cmd takes over again (publish "stop" to park the robot).
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 
@@ -32,6 +34,7 @@ class DiffDriveNode : public rclcpp::Node {
     declare_parameter("motor_id_right", 2);
     declare_parameter("poll_rate_hz", 100.0);
     declare_parameter("kd_drive", 0.5);
+    declare_parameter("accel_limit_rad_s2", 30.0);  // motor-side slew limit for commanded omega
     declare_parameter("wheel_radius", 0.1);    // m
     declare_parameter("track_width", 0.4);     // m, wheel centre to wheel centre
     declare_parameter("gear_ratio", 10.0);     // motor rad/s per wheel rad/s
@@ -54,8 +57,10 @@ class DiffDriveNode : public rclcpp::Node {
     const uint8_t id_l = static_cast<uint8_t>(get_parameter("motor_id_left").as_int());
     const uint8_t id_r = static_cast<uint8_t>(get_parameter("motor_id_right").as_int());
     const double rate_hz = get_parameter("poll_rate_hz").as_double();
+    poll_rate_hz_ = rate_hz;
 
     kd_drive_     = get_parameter("kd_drive").as_double();
+    accel_limit_  = get_parameter("accel_limit_rad_s2").as_double();
     wheel_radius_ = get_parameter("wheel_radius").as_double();
     track_width_  = get_parameter("track_width").as_double();
     gear_ratio_   = get_parameter("gear_ratio").as_double();
@@ -75,6 +80,8 @@ class DiffDriveNode : public rclcpp::Node {
     limits.t_max  = get_parameter("t_max").as_double();
     limits.kp_max = get_parameter("kp_max").as_double();
     limits.kd_max = get_parameter("kd_max").as_double();
+    // Never command the full-scale raw value (0xFFF): keep 2 % off the rail.
+    v_cmd_max_ = 0.98 * limits.v_max;
 
     can_socket_ = std::make_unique<CanSocket>(can_iface);
     codec_l_ = std::make_unique<Ak40Codec>(id_l, limits);
@@ -115,6 +122,8 @@ class DiffDriveNode : public rclcpp::Node {
           latched_x_ = 0.0;
           latched_z_ = 0.0;
           has_cmd_vel_ = false;
+          slew_l_ = 0.0;
+          slew_r_ = 0.0;
           resp->success = true;
           resp->message = "Both motors enabled (MIT mode); standstill until move_cmd/cmd_vel";
           RCLCPP_INFO(get_logger(), "Both motors enabled (commands cleared, standstill)");
@@ -145,6 +154,8 @@ class DiffDriveNode : public rclcpp::Node {
     can_socket_->write(codec_l_->exit_mit_mode());
     can_socket_->write(codec_r_->exit_mit_mode());
     enabled_ = false;
+    slew_l_ = 0.0;
+    slew_r_ = 0.0;
   }
 
   void on_cmd_vel(const geometry_msgs::msg::Twist::SharedPtr msg) {
@@ -194,12 +205,20 @@ class DiffDriveNode : public rclcpp::Node {
       const double v_motor_l = v_wheel_l * gear_ratio_ * (invert_left_  ? -1.0 : 1.0);
       const double v_motor_r = v_wheel_r * gear_ratio_ * (invert_right_ ? -1.0 : 1.0);
 
+      // Slew-rate limit omega* toward the target. An instantaneous full-scale step
+      // demands kd_drive x 45.5 ~= 22.8 Nm -- ~12x the AK40-10 peak (1.9 Nm) --
+      // which trips drive protection out of MIT mode (one jerk, green LED off).
+      // The ramp keeps kd x (omega* - omega) a small fraction of peak torque.
+      const double dv = accel_limit_ / poll_rate_hz_;
+      slew_l_ += std::clamp(v_motor_l - slew_l_, -dv, dv);
+      slew_r_ += std::clamp(v_motor_r - slew_r_, -dv, dv);
+
       MitCommand cmd_l;
-      cmd_l.velocity = v_motor_l;
+      cmd_l.velocity = std::clamp(slew_l_, -v_cmd_max_, v_cmd_max_);
       cmd_l.kp = 0.0;
       cmd_l.kd = kd_drive_;
       MitCommand cmd_r;
-      cmd_r.velocity = v_motor_r;
+      cmd_r.velocity = std::clamp(slew_r_, -v_cmd_max_, v_cmd_max_);
       cmd_r.kp = 0.0;
       cmd_r.kd = kd_drive_;
 
@@ -288,6 +307,11 @@ class DiffDriveNode : public rclcpp::Node {
   bool   invert_right_{false};
   double command_timeout_ms_{500.0};
   double temp_limit_c_{75.0};
+  double accel_limit_{30.0};   // rad/s^2 slew limit for commanded motor omega
+  double poll_rate_hz_{100.0};
+  double v_cmd_max_{44.6};     // 0.98 x v_max: never send the full-scale rail value
+  double slew_l_{0.0};         // currently commanded left motor omega (rad/s)
+  double slew_r_{0.0};
 };
 
 }  // namespace ak_motor_driver

@@ -543,8 +543,9 @@ forward. If one rolls backward, set `invert_left: true` or `invert_right: true` 
 | `wheel_radius` | `0.1` m | wheel radius |
 | `track_width` | `0.4` m | wheel centre-to-centre |
 | `gear_ratio` | `10.0` | motor rad/s per wheel rad/s |
-| `linear_speed` / `turn_speed` | `0.5` / `1.0` | presets for move_cmd strings |
+| `linear_speed` / `turn_speed` | `0.4` / `1.0` | presets for move_cmd strings |
 | `kd_drive` | `0.5` | velocity-mode damping on both wheels |
+| `accel_limit_rad_s2` | `30` | motor-ω slew limit — prevents torque steps that trip protection |
 | `invert_left` / `invert_right` | `false` | flip mirrored motor mounts |
 | `command_timeout_ms` | `500` | stale cmd_vel → fall back to latched move_cmd |
 | `temp_limit_c` | `75` | either motor overtemp → **both** auto-disable |
