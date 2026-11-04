@@ -185,6 +185,7 @@ candump — no reply means the frame is not being ACKed (bus/termination/ID).
 | `slcan0` missing | `ls /dev/ttyACM*`, re-run setup script, `lsusb` for `16d0:117e` |
 | One LED on enable | raw check on that motor's ID (§ Terminal 3); ID mismatch → CubeMarsTool |
 | LEDs green, no movement | § LEDs green but the robot does not move — 3-step tree (node alive? frames non-zero? raw spin test?) |
+| Single-motor test works, diff-drive doesn't | Don't run both at once (both stream MIT frames to motor 1 → fight); `Ctrl+C` run_motor.sh, `colcon build`, then `./scripts/robot_up.sh` |
 | No reply on any ID | motor PSU on? H/L swap? daisy-chain = motor 1 pins 3/4 → motor 2 pins 1/2 |
 | Error frames / bus-off | termination: adapter DIP ON + 120 Ω at far end only; `ip -details -statistics link show slcan0` |
 | Robot drifts in "straight" | wheel directions, then `track_width`; unequal tyre wear also pulls |
