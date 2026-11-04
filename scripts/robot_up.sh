@@ -47,8 +47,14 @@ fi
 
 # ── 3) wait for the node, then enable (starts from standstill) ───────────────
 echo ">> waiting for $NODE/enable ..."
-for _ in $(seq 1 40); do
+LAUNCH_PID="$(cat "$PIDFILE" 2>/dev/null || true)"
+for _ in $(seq 1 30); do
   ros2 service list 2>/dev/null | grep -q "$NODE/enable" && break
+  if [ -n "$LAUNCH_PID" ] && ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+    echo "ERROR: launch process died - last lines of $LOG:" >&2
+    tail -n 15 "$LOG" >&2
+    exit 1
+  fi
   sleep 0.5
 done
 ros2 service call "$NODE/enable" std_srvs/srv/Trigger

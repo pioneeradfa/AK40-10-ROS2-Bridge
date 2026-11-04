@@ -14,7 +14,7 @@ if [ -z "${ROS_DISTRO:-}" ]; then
 fi
 for ws in "$REPO/install/setup.bash" "$REPO/../install/setup.bash"; do
   if [ -f "$ws" ]; then source "$ws"; break; fi
-fi
+done
 
 echo ">> stop ..."
 timeout 4 ros2 topic pub --rate 5 "$NODE/move_cmd" std_msgs/msg/String "{data: 'stop'}" >/dev/null 2>&1
