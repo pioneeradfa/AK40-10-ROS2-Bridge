@@ -171,19 +171,48 @@ Frames flip to `FF F0` but wheels stay still → motor power stage: check the
 24 V supply under load (current limit?), `ros2 topic echo /diff_drive_node/joint_state`
 feedback velocity stays 0 while commanded ≠ 0 confirms it. Go to step 3.
 
-**3) Raw motor test — bypass ROS entirely.** Kill the node first (its shutdown
-sends exit-MIT), then re-enter MIT and spin by hand. ⚠ Wheels off the ground:
+**3) Raw motor test — bypass ROS entirely.** Stop the node first
+(`./scripts/robot_down.sh` — otherwise its 100 Hz stream overwrites every
+`cansend`; it also exits MIT, so re-enter below). ⚠ Wheels OFF the ground —
+a latched MIT command keeps applying until you send the stop frame.
+
+The discriminating matrix (motor 1; use `006#` for motor 2). All frames use
+p_des = 0, kp = 0, kd = 0.5 except E4; only the velocity field changes:
 
 ```bash
-cansend slcan0 001#FFFFFFFFFFFFFFFC      # enter MIT (LED green)
-cansend slcan0 001#7FFFFFF0001997FF      # RUN at +45.5 rad/s target -> wheel spins up
-cansend slcan0 001#7FFF7FF0001997FF      # stop (v = 0)
-cansend slcan0 001#FFFFFFFFFFFFFFFD      # exit MIT when done
+cansend slcan0 001#FFFFFFFFFFFFFFFC    # E0: enter MIT (LED green)
+
+cansend slcan0 001#7FFFFFF0001997FF    # E1: v=+45.5 (FULL SCALE 0xFFF - what the node sends)
+cansend slcan0 001#7FFF7FF0001997FF    #     stop
+
+cansend slcan0 001#7FFFB830001997FF    # E2: v=+20 (mid-scale 0xB83)
+cansend slcan0 001#7FFF7FF0001997FF    #     stop
+
+cansend slcan0 001#7FFF8DD0001997FF    # E2b: v=+5 (just above zero 0x8DD)
+cansend slcan0 001#7FFF7FF0001997FF    #     stop
+
+cansend slcan0 001#7FFFFFF0006667FF    # E3: v=+45.5 but kd=2.0 (stronger damping)
+cansend slcan0 001#7FFF7FF0001997FF    #     stop
+
+cansend slcan0 001#8A3C7FF0080F57FF    # E4 control: position mode p=+1 rad, kp=1.0, kd=0.3
+                                       #     (mirrors the run_motor.sh deg test that works)
+
+cansend slcan0 001#FFFFFFFFFFFFFFFD    # exit MIT when done
 ```
 
-Spins raw but not via the node → ROS-side (steps 1–2). Does not spin raw →
-power/wiring/motor state; each command must get a reply `001 [8] 01 ...` in
-candump — no reply means the frame is not being ACKed (bus/termination/ID).
+Reading the results:
+
+| Result | Meaning → fix |
+|---|---|
+| E1 still, **E2/E2b spin** | firmware rejects/misreads the full-scale rail value `0xFFF` → command below the rail (lower `linear_speed`, encoder clamps v to < max) |
+| E2 spins **backwards** | firmware reads the v field as signed → codec mapping must change |
+| E1 still, **E3 spins** | kd = 0.5 too weak to overcome gearbox stiction → raise `kd_drive` |
+| E1–E3 still, **E4 moves** | velocity field dead in this firmware → position-mode driving needed |
+| E4 also still | motor/firmware state → power-cycle 24 V, re-run from E0 |
+| No reply frames at all | bus/termination/ID — frame not ACKed |
+
+Does not spin raw but spins via node frames → impossible (same bytes); if the
+node path fails while E1–E4 behave, re-check steps 1–2.
 
 ## Quick fault reference
 
