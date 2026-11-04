@@ -130,12 +130,61 @@ ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0
 
 (Install `slcan0.service` per guide §10(a) and the CAN step disappears entirely.)
 
+## LEDs green but the robot does not move
+
+A green LED only means "motor is in MIT mode" — it stays green even with the
+node stopped (MIT latches until exit-MIT or power-off). Work the tree:
+
+**1) Did `forward` reach the node?** The node logs every latched command.
+
+```bash
+# launch running in a terminal -> look for this line after drive.sh forward:
+#> [INFO] [diff_drive_node]: move_cmd 'forward' (x=0.50 m/s, z=0.00 rad/s)
+grep move_cmd /tmp/diff_drive.log        # if started via robot_up.sh
+ros2 node list                           #> /diff_drive_node  (missing = node not running!)
+echo $ROS_DOMAIN_ID                      # must match in BOTH terminals (launch + drive)
+```
+
+No log line → the message never arrived: relaunch the node
+(`./scripts/robot_up.sh`), check domain IDs, don't run `drive.sh` under sudo.
+
+**2) Is the node putting non-zero velocity on the bus?** Watch while commanding:
+
+```bash
+candump slcan0 &                         # then, other terminal: ./scripts/drive.sh forward
+```
+
+| State | Frames from `001` and `006` (100 Hz stream) |
+|---|---|
+| standstill (enabled) | `7F FF 7F F0 00 19 97 FF`  (v = 0) |
+| `forward` latched | `7F FF FF F0 00 19 97 FF`  (v = +45.5 rad/s, kd = 0.5) |
+| `backward` latched | `7F FF 00 00 00 19 97 FF`  (v = −45.5 rad/s) |
+
+Frames flip to `FF F0` but wheels stay still → motor power stage: check the
+24 V supply under load (current limit?), `ros2 topic echo /diff_drive_node/joint_state`
+feedback velocity stays 0 while commanded ≠ 0 confirms it. Go to step 3.
+
+**3) Raw motor test — bypass ROS entirely.** Kill the node first (its shutdown
+sends exit-MIT), then re-enter MIT and spin by hand. ⚠ Wheels off the ground:
+
+```bash
+cansend slcan0 001#FFFFFFFFFFFFFFFC      # enter MIT (LED green)
+cansend slcan0 001#7FFFFFF0001997FF      # RUN at +45.5 rad/s target -> wheel spins up
+cansend slcan0 001#7FFF7FF0001997FF      # stop (v = 0)
+cansend slcan0 001#FFFFFFFFFFFFFFFD      # exit MIT when done
+```
+
+Spins raw but not via the node → ROS-side (steps 1–2). Does not spin raw →
+power/wiring/motor state; each command must get a reply `001 [8] 01 ...` in
+candump — no reply means the frame is not being ACKed (bus/termination/ID).
+
 ## Quick fault reference
 
 | Symptom | First check |
 |---|---|
 | `slcan0` missing | `ls /dev/ttyACM*`, re-run setup script, `lsusb` for `16d0:117e` |
 | One LED on enable | raw check on that motor's ID (§ Terminal 3); ID mismatch → CubeMarsTool |
+| LEDs green, no movement | § LEDs green but the robot does not move — 3-step tree (node alive? frames non-zero? raw spin test?) |
 | No reply on any ID | motor PSU on? H/L swap? daisy-chain = motor 1 pins 3/4 → motor 2 pins 1/2 |
 | Error frames / bus-off | termination: adapter DIP ON + 120 Ω at far end only; `ip -details -statistics link show slcan0` |
 | Robot drifts in "straight" | wheel directions, then `track_width`; unequal tyre wear also pulls |
