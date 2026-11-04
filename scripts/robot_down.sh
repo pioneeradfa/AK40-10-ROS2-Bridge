@@ -8,8 +8,9 @@ NODE="/diff_drive_node"
 PIDFILE=/tmp/diff_drive.pid
 
 if [ -z "${ROS_DISTRO:-}" ]; then
-  for d in /opt/ros/humble /opt/ros/jazzy /opt/ros/rolling; do
-    if [ -f "$d/setup.bash" ]; then source "$d/setup.bash"; break; fi
+  for f in /opt/ros/humble/setup.bash /opt/ros/jazzy/setup.bash /opt/ros/rolling/setup.bash \
+           "$HOME"/ros2_*/install/setup.bash; do
+    if [ -f "$f" ]; then source "$f"; break; fi
   done
 fi
 for ws in "$REPO/install/setup.bash" "$REPO/../install/setup.bash"; do
