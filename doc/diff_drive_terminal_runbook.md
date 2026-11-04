@@ -8,6 +8,22 @@ Copy-paste order below. `#>` marks expected output.
 
 ---
 
+## Zero-juggling session (recommended)
+
+```bash
+cd ~/diff_can_ak40_ros2
+./scripts/robot_up.sh        # CAN up -> launch in background -> enable (standstill)
+./scripts/drive.sh forward   # ... drive words, or teleop:
+ros2 run ak_motor_driver teleop_drive.py
+./scripts/robot_down.sh      # stop -> disable -> kill launch; then cut 24 V
+```
+
+`robot_up.sh` logs the node to `/tmp/diff_drive.log` (`tail -f` it) and reuses a
+running launch if present. Everything below is the same sequence spelled out
+per terminal, for when you want the windows open.
+
+---
+
 ## Terminal 1 — CAN interface (once per boot)
 
 ```bash

@@ -484,6 +484,9 @@ ros2 service call /cable_torque_ctrl_node/disarm std_srvs/srv/Trigger
 
 Step-by-step terminal runbook for the two-motor rig (boot → CAN → launch → enable →
 drive → calibrate → shutdown): **[doc/diff_drive_terminal_runbook.md](doc/diff_drive_terminal_runbook.md)**.
+Shortest session: `./scripts/robot_up.sh` (CAN + background launch + enable) →
+`./scripts/drive.sh forward|backward|left|right|stop` or `teleop_drive.py` →
+`./scripts/robot_down.sh`.
 
 `diff_drive_node` drives **two motors on one CAN bus** (this rig: left = ID 1,
 right = ID 6 — set via `motor_id_left` / `motor_id_right` in
