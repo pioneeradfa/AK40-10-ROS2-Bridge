@@ -521,7 +521,10 @@ ros2 run ak_motor_driver teleop_drive.py     # w/s/a/d move, x stop, q quit
 
 Fresh `cmd_vel` overrides the latched `move_cmd`; when `cmd_vel` goes stale
 (`command_timeout_ms`, default 500 ms) the node falls back to the latched command —
-publish `stop` (or `./scripts/drive.sh stop`) to park.
+publish `stop` (or `./scripts/drive.sh stop`) to park. `enable` is required once per
+session (the node transmits MIT frames only while enabled) and always starts from
+**standstill**: latched commands are cleared at enable so a stale `forward` cannot
+lunge the robot. `disable` or node shutdown sends exit-MIT to both motors.
 
 **Kinematics:** `v_wheel = (linear.x ∓ angular.z·track_width/2) / wheel_radius`,
 motor speed = wheel speed × `gear_ratio` (AK40-10 = 10:1). Measure `wheel_radius`

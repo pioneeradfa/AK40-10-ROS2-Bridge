@@ -51,8 +51,8 @@ different ID (isolate it and re-flash the ID with CubeMarsTool).
 ## Terminal 3 — enable and drive
 
 ```bash
-./scripts/drive.sh enable            #> success=True 'Both motors enabled (MIT mode)'
-                                     #   both driver-board LEDs green
+./scripts/drive.sh enable            #> 'Both motors enabled ... standstill until move_cmd'
+                                     #   both driver-board LEDs green; robot holds still
 ./scripts/drive.sh forward           # robot rolls forward
 ./scripts/drive.sh stop              # zero-velocity hold
 ./scripts/drive.sh backward

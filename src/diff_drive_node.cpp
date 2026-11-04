@@ -110,9 +110,14 @@ class DiffDriveNode : public rclcpp::Node {
           can_socket_->write(codec_l_->enter_mit_mode());
           can_socket_->write(codec_r_->enter_mit_mode());
           enabled_ = true;
+          // Safety: start from standstill — a command latched while disabled must
+          // not make the robot lunge the moment MIT mode engages.
+          latched_x_ = 0.0;
+          latched_z_ = 0.0;
+          has_cmd_vel_ = false;
           resp->success = true;
-          resp->message = "Both motors enabled (MIT mode)";
-          RCLCPP_INFO(get_logger(), "Both motors enabled");
+          resp->message = "Both motors enabled (MIT mode); standstill until move_cmd/cmd_vel";
+          RCLCPP_INFO(get_logger(), "Both motors enabled (commands cleared, standstill)");
         });
 
     disable_srv_ = create_service<std_srvs::srv::Trigger>(
