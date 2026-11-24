@@ -9,16 +9,17 @@ diff_drive_node:
     # Slew limit for commanded motor omega (rad/s^2). Prevents torque-demand
     # steps that trip drive protection (one jerk + green LED off) out of MIT mode.
     accel_limit_rad_s2: 30.0
-    # Robot geometry — MEASURE THESE ON YOUR CHASSIS
-    wheel_radius: 0.1     # m
-    track_width: 0.4      # m, wheel centre to wheel centre
+    # Robot geometry — MEASURED on this chassis (2026-11)
+    wheel_radius: 0.06    # m   (6 cm wheels: axle centre to ground, loaded)
+    track_width: 0.205    # m   (20.5 cm: centre of left tyre to centre of right tyre)
     gear_ratio: 10.0      # AK40-10 reduction 10:1 -> motor rad/s per wheel rad/s
     # Presets used by ~/move_cmd strings
-    linear_speed: 0.4     # m/s for "forward" / "backward"  (0.5 asks 50 rad/s > v_max 45.5)
+    linear_speed: 0.25    # m/s for "forward" / "backward"
+                          # top speed = v_max/gear x r = 45.5/10 x 0.06 = 0.27 m/s -> stay below
     turn_speed: 1.0       # rad/s for "left" / "right" (pivot turn in place)
     # Set true if a motor is mounted mirrored (wheel spins backwards)
-    invert_left: false
-    invert_right: false
+    invert_left: true     # verified with check_motors.sh: left motor (ID 1) is mirrored
+    invert_right: false   # verified with check_motors.sh: right motor (ID 6) is normal
     # cmd_vel watchdog: stale cmd_vel falls back to latched move_cmd
     command_timeout_ms: 500.0
     temp_limit_c: 75.0    # auto-disable BOTH motors above this

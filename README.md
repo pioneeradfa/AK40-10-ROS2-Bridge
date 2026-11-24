@@ -519,8 +519,9 @@ ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0 motor_id_
 ros2 run ak_motor_driver teleop_drive.py     # w/s/a/d step speed up/down, x stop, q quit
 ```
 
-Speed builds **incrementally**: each `w`/`s` press adds/subtracts 0.05 m/s
-(clamped ±0.5), each `a`/`d` ±0.1 rad/s (clamped ±1.0); hold a key to keep
+Speed builds **incrementally**: each `w`/`s` press adds/subtracts 0.025 m/s
+(clamped ±0.25 — the robot tops out ≈0.27 m/s with 6 cm wheels), each `a`/`d`
+±0.1 rad/s (clamped ±1.0); hold a key to keep
 ramping via key-repeat, `W/S/A/D` for 4× steps — smooth acceleration instead of
 jumping to full speed.
 
@@ -548,10 +549,10 @@ must roll forward; a wheel rolling backward is a mirrored mount → set its
 | Parameter | Default | Meaning |
 |---|---|---|
 | `motor_id_left` / `motor_id_right` | `1` / `6` | CAN IDs of the two actuators (launch args or config) |
-| `wheel_radius` | `0.1` m | wheel radius |
-| `track_width` | `0.4` m | wheel centre-to-centre |
+| `wheel_radius` | `0.06` m | wheel radius (measured: 6 cm wheels) |
+| `track_width` | `0.205` m | wheel centre-to-centre (measured: 20.5 cm) |
 | `gear_ratio` | `10.0` | motor rad/s per wheel rad/s |
-| `linear_speed` / `turn_speed` | `0.4` / `1.0` | presets for move_cmd strings |
+| `linear_speed` / `turn_speed` | `0.25` / `1.0` | presets for move_cmd strings (top speed ≈ v_max/gear × r ≈ 0.27 m/s) |
 | `kd_drive` | `0.5` | velocity-mode damping on both wheels |
 | `accel_limit_rad_s2` | `30` | motor-ω slew limit — prevents torque steps that trip protection |
 | `invert_left` / `invert_right` | `false` | flip mirrored motor mounts |

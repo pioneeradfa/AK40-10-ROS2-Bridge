@@ -9,7 +9,7 @@ key-repeat. The node additionally slew-limits the motor commands, so the robot
 accelerates smoothly instead of jumping to full speed.
 
 Keys:
-   w / s   linear  + / −  0.05 m/s per press   (clamped ±0.5 m/s)
+   w / s   linear  + / −  0.025 m/s per press  (clamped ±0.25 m/s)
    a / d   angular + / −  0.1 rad/s per press  (clamped ±1.0 rad/s)
    W/S/A/D big steps (4×) for quick ramping
    x       stop now (zero both)
@@ -29,8 +29,8 @@ import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
 
-LIN_STEP = 0.05   # m/s   per w/s press
-LIN_MAX = 0.5     # m/s   clamp
+LIN_STEP = 0.025  # m/s   per w/s press
+LIN_MAX = 0.25    # m/s   clamp (robot tops out ~0.27 m/s: v_max/gear x wheel_radius)
 ANG_STEP = 0.1    # rad/s per a/d press
 ANG_MAX = 1.0     # rad/s clamp
 FAST = 4          # multiplier for uppercase W/S/A/D
@@ -38,7 +38,7 @@ FAST = 4          # multiplier for uppercase W/S/A/D
 HELP = """
 ---------------------------
 Incremental speed control:
-   w  linear  +0.05 m/s    s  linear  -0.05 m/s   (max ±0.5 m/s)
+   w  linear  +0.025 m/s   s  linear  -0.025 m/s  (max ±0.25 m/s)
    a  angular +0.1 rad/s   d  angular -0.1 rad/s  (max ±1.0 rad/s)
    W/S/A/D  big step (4x)  -  hold a key to keep ramping
    x  stop now             q  quit

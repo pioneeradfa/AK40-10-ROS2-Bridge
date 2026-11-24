@@ -89,7 +89,7 @@ reactive driving.
 
 ```bash
 ros2 run ak_motor_driver teleop_drive.py
-#  w/s   linear  +/− 0.05 m/s per press  (clamp ±0.5 m/s)
+#  w/s   linear  +/− 0.025 m/s per press (clamp ±0.25 m/s)
 #  a/d   angular +/− 0.1 rad/s per press (clamp ±1.0 rad/s)
 #  W/S/A/D big steps (4×) · HOLD a key to keep ramping · x stop · q quit
 ```
@@ -111,9 +111,20 @@ ros2 topic echo /diff_drive_node/cmd_vel        # what teleop is sending
    `forward`; any wheel rolling backward → set its `invert_*: true` in
    `config/diff_drive_params.yaml`, then `colcon build --packages-select
    ak_motor_driver` (re-installs the config) and relaunch.
-2. **Geometry:** measure and set `wheel_radius` (m) and `track_width` (m, wheel
-   centre-to-centre) in the same file; rebuild + relaunch. Turns are only true after this.
-3. **Speeds:** `linear_speed` (m/s) and `turn_speed` (rad/s) set the drive.sh presets.
+   **Verified on this rig:** left = ID 1 with `invert_left: true`,
+   right = ID 6 with `invert_right: false`.
+2. **Geometry** — this rig: `wheel_radius: 0.06`, `track_width: 0.205`.
+   `track_width` = centre of the left TYRE to centre of the right TYRE (not the
+   chassis width, not the gap between the wheels). Accurate method: stand the
+   robot on cardboard so the tyres leave prints, mark the centre of each contact
+   patch, measure mark-to-mark. Alternative: inner face-to-face of the tyres
+   PLUS one tyre width (or outer-to-outer MINUS one tyre width).
+   `wheel_radius` = axle centre to ground with the robot's weight on the wheels.
+   Rebuild + relaunch after editing — distances and turns are only true then.
+3. **Speeds:** `linear_speed` (m/s) and `turn_speed` (rad/s) set the drive.sh
+   presets (now 0.25 / 1.0). Top-speed check: max m/s = `v_max / gear_ratio ×
+   wheel_radius` = 45.5/10 × 0.06 ≈ **0.27 m/s** — keep `linear_speed` below it
+   or the motors just saturate at full ω.
 
 ## Shutdown (always in this order)
 
