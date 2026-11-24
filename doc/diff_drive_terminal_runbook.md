@@ -104,10 +104,13 @@ ros2 topic echo /diff_drive_node/cmd_vel        # what teleop is sending
 
 ## One-time calibration
 
-1. **Wheel directions:** `enable` → `forward`. Any wheel rolling backward →
-   edit `config/diff_drive_params.yaml` (`invert_left: true` / `invert_right: true`),
-   then `colcon build --packages-select ak_motor_driver` (re-installs the config)
-   and relaunch.
+1. **Which ID is left/right + wheel directions:** run `./scripts/check_motors.sh`
+   — it spins each motor individually with safe ramps (no ROS needed), asks which
+   wheel turned which way, and prints the exact `motor_id_left` / `motor_id_right`
+   / `invert_left` / `invert_right` lines. Manual alternative: `enable` →
+   `forward`; any wheel rolling backward → set its `invert_*: true` in
+   `config/diff_drive_params.yaml`, then `colcon build --packages-select
+   ak_motor_driver` (re-installs the config) and relaunch.
 2. **Geometry:** measure and set `wheel_radius` (m) and `track_width` (m, wheel
    centre-to-centre) in the same file; rebuild + relaunch. Turns are only true after this.
 3. **Speeds:** `linear_speed` (m/s) and `turn_speed` (rad/s) set the drive.sh presets.
@@ -205,7 +208,7 @@ cansend slcan0 001#7FFF7FF0001997FF    #     stop
 cansend slcan0 001#7FFFB830001997FF    # E2: v=+20 (mid-scale 0xB83)
 cansend slcan0 001#7FFF7FF0001997FF    #     stop
 
-cansend slcan0 001#7FFF8DD0001997FF    # E2b: v=+5 (just above zero 0x8DD)
+cansend slcan0 001#7FFF8E00001997FF    # E2b: v=+5 (just above zero 0x8E0)
 cansend slcan0 001#7FFF7FF0001997FF    #     stop
 
 cansend slcan0 001#7FFFFFF0006667FF    # E3: v=+45.5 but kd=2.0 (stronger damping)

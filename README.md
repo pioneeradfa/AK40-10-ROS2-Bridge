@@ -538,9 +538,12 @@ lunge the robot. `disable` or node shutdown sends exit-MIT to both motors.
 motor speed = wheel speed × `gear_ratio` (AK40-10 = 10:1). Measure `wheel_radius`
 and `track_width` on your chassis in `config/diff_drive_params.yaml`.
 
-**First-run wheel direction check:** `enable` → `forward` → both wheels must roll
-forward. If one rolls backward, set `invert_left: true` or `invert_right: true` in
-`config/diff_drive_params.yaml` (mirrored motor mounts), rebuild-free — just relaunch.
+**First-run motor identification:** `./scripts/check_motors.sh` spins each motor
+ID individually (gentle ramps, interactive prompts, no ROS needed) and prints the
+exact `motor_id_left` / `motor_id_right` / `invert_left` / `invert_right` lines for
+`config/diff_drive_params.yaml`. Manual version: `enable` → `forward` → both wheels
+must roll forward; a wheel rolling backward is a mirrored mount → set its
+`invert_*: true`, then `colcon build --packages-select ak_motor_driver` and relaunch.
 
 | Parameter | Default | Meaning |
 |---|---|---|
