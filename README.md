@@ -7,6 +7,24 @@ ROS 2 driver for the CubeMars AK40-10 actuator over SocketCAN.
 > connection test, one-command motor run) on Pi OS Bookworm + ROS 2 Humble.
 > Full-length guide: [`doc/raspberry_pi5_akcan40.md`](doc/raspberry_pi5_akcan40.md).
 
+**What is in this repo** — the two-wheel robot is fully working and calibrated
+(left motor = CAN ID 1 mirrored `invert_left: true`, right = ID 6, 6 cm wheels,
+20.5 cm track, top speed ≈ 0.27 m/s). Entry points:
+
+| Task | Command | Docs |
+|---|---|---|
+| Whole robot session (CAN → node → enable) | `./scripts/robot_up.sh` | [diff-drive runbook](doc/diff_drive_terminal_runbook.md) |
+| Drive with words | `./scripts/drive.sh forward\|backward\|left\|right\|stop` | runbook |
+| Drive with keyboard (incremental speed) | `ros2 run ak_motor_driver teleop_drive.py` | runbook |
+| Identify motor IDs + wheel directions | `./scripts/check_motors.sh` | runbook § One-time calibration |
+| Safe teardown (stop → disable → kill) | `./scripts/robot_down.sh` | runbook |
+| Single-motor bench test | `./scripts/run_motor.sh deg 90` | [PI5_QUICKSTART.md](PI5_QUICKSTART.md) |
+| Raw single-node control (`JointState` cmds) | `ros2 run ak_motor_driver ak_motor_node` | § Launch below |
+| Cable-drum (series-elastic) control | `ak_motor_cable_control_node` / `cable_torque_controller_node` | § Cable control below |
+
+CAN bring-up (`sudo ./scripts/setup_can_pi5.sh`, once per boot) is done for you
+automatically by `robot_up.sh`, `run_motor.sh` and `check_motors.sh`.
+
 ## Prerequisites
 
 ### 1. CAN setup (Raspberry Pi 5)
@@ -496,8 +514,8 @@ turns and stop for a two-wheel robot.
 
 ```bash
 ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0   # or can0
-# override IDs without editing config:
-ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0 motor_id_right:=6
+# defaults match this rig (left 1 / right 6); override without editing config:
+ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0 motor_id_left:=3 motor_id_right:=4
 ```
 
 **Five motion commands** (latched — one publish keeps the robot moving until the next):
@@ -555,7 +573,7 @@ must roll forward; a wheel rolling backward is a mirrored mount → set its
 | `linear_speed` / `turn_speed` | `0.25` / `1.0` | presets for move_cmd strings (top speed ≈ v_max/gear × r ≈ 0.27 m/s) |
 | `kd_drive` | `0.5` | velocity-mode damping on both wheels |
 | `accel_limit_rad_s2` | `30` | motor-ω slew limit — prevents torque steps that trip protection |
-| `invert_left` / `invert_right` | `false` | flip mirrored motor mounts |
+| `invert_left` / `invert_right` | `true` / `false` | flip mirrored motor mounts — verified with `check_motors.sh`: the LEFT motor (ID 1) is mirrored on this rig |
 | `command_timeout_ms` | `500` | stale cmd_vel → fall back to latched move_cmd |
 | `temp_limit_c` | `75` | either motor overtemp → **both** auto-disable |
 
@@ -563,7 +581,7 @@ Feedback: `~/joint_state` (names `wheel_left`, `wheel_right`: position rad,
 velocity rad/s, torque Nm) and `~/temperature` (`[left, right]` °C). The node sends
 exit-MIT to both motors on `disable` and on shutdown.
 
-**If only one motor enables (one green LED):** test motor 2 directly on the bus:
+**If only one motor enables (one green LED):** test the silent motor directly on the bus:
 
 ```bash
 ./scripts/drive.sh disable
@@ -574,11 +592,13 @@ cansend slcan0 006#FFFFFFFFFFFFFFFC    # ask the right motor at ITS id (here 6) 
 - Reply `006 [8] 06 …` (data[0] echoes the ID) → motor is alive at that ID: make sure
   `motor_id_right` matches it, re-enable and watch
   `ros2 topic echo /diff_drive_node/joint_state` (both wheels must appear).
-- **No reply** → one of: (a) motor 2's CAN ID is not 2 — power motor 2 *alone* and
-  `cansend slcan0 001#FFFFFFFFFFFFFFFC`; if it answers, it is still ID 1: re-flash the
-  ID to 2 with CubeMarsTool/R-Link. (b) daisy-chain wiring — the bus must run
+- **No reply** → one of: (a) that motor's CAN ID is not what the config says —
+  power it *alone* on the bus and scan: `cansend slcan0 001#FFFFFFFFFFFFFFFC`,
+  then `002#…`, … up to `00A#…` until one answers (`data[0]` echoes the ID);
+  set `motor_id_left`/`motor_id_right` to the found value (or re-flash the ID
+  with CubeMarsTool/R-Link). (b) daisy-chain wiring — the bus must run
   adapter → motor 1 pins 1/2, then **motor 1 pins 3/4 → motor 2 pins 1/2**
-  (pins 3/4 are the daisy-chain duplicates). (c) motor 2 power or CAN stub loose.
+  (pins 3/4 are the daisy-chain duplicates). (c) motor power or CAN stub loose.
 - Termination belongs only at the two physical ends of the chain (adapter DIP switch
   ON + 120 Ω at motor 2). The mid-bus motor 1 must **not** be terminated.
 
@@ -615,6 +635,10 @@ ros2 topic pub --rate 50 /ak_motor_node/command sensor_msgs/msg/JointState \
 ```
 
 ## Debugging
+
+**Diff-drive robot not moving?** Use the runbook decision trees first:
+[LEDs green but the robot does not move](doc/diff_drive_terminal_runbook.md#leds-green-but-the-robot-does-not-move)
+(node alive? frames on the bus? raw spin matrix?) plus the quick fault table at the end.
 
 Verify raw CAN traffic:
 
