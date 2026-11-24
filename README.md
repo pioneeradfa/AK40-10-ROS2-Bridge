@@ -516,8 +516,13 @@ ros2 launch ak_motor_driver diff_drive.launch.py can_interface:=slcan0 motor_id_
 `linear.x` m/s + `angular.z` rad/s). Keyboard teleop with **no extra packages**:
 
 ```bash
-ros2 run ak_motor_driver teleop_drive.py     # w/s/a/d move, x stop, q quit
+ros2 run ak_motor_driver teleop_drive.py     # w/s/a/d step speed up/down, x stop, q quit
 ```
+
+Speed builds **incrementally**: each `w`/`s` press adds/subtracts 0.05 m/s
+(clamped ±0.5), each `a`/`d` ±0.1 rad/s (clamped ±1.0); hold a key to keep
+ramping via key-repeat, `W/S/A/D` for 4× steps — smooth acceleration instead of
+jumping to full speed.
 
 (Prefer the stock package? `sudo apt install ros-<distro>-teleop-twist-keyboard`, then
 `ros2 run teleop_twist_keyboard teleop_twist_keyboard_node --ros-args -r cmd_vel:=/diff_drive_node/cmd_vel`.)

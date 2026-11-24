@@ -89,7 +89,9 @@ reactive driving.
 
 ```bash
 ros2 run ak_motor_driver teleop_drive.py
-#  w forward · s backward · a left · d right · x stop · q quit
+#  w/s   linear  +/− 0.05 m/s per press  (clamp ±0.5 m/s)
+#  a/d   angular +/− 0.1 rad/s per press (clamp ±1.0 rad/s)
+#  W/S/A/D big steps (4×) · HOLD a key to keep ramping · x stop · q quit
 ```
 
 ## Terminal 4 — monitoring (any time)
